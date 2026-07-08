@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Análise de Marca — {{ m.name }}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a2535; background: #fff; line-height: 1.55; }
+
+/* ── Print Setup ── */
+@page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+@media print {
+  .no-print { display: none !important; }
+  .page-break { page-break-before: always; }
+  .avoid-break { page-break-inside: avoid; }
+  body { font-size: 10pt; }
+  a { color: inherit; text-decoration: none; }
+}
+
+/* ── Screen only ── */
+@media screen {
+  body { background: #f0f2f5; }
+  .report-wrapper { max-width: 820px; margin: 0 auto; background: #fff; padding: 32px 40px; min-height: 100vh; box-shadow: 0 0 40px rgba(0,0,0,.12); }
+  .print-bar { position: sticky; top: 0; z-index: 99; background: #0f1c35; color: #fff; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #f97316; margin-bottom: 0; }
+  .print-bar-title { font-size: 13px; font-weight: 600; }
+  .btn-print { background: #f97316; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .btn-print:hover { opacity: .85; }
+  .btn-back { background: transparent; border: 1px solid #3b5a80; color: #aac4e0; border-radius: 6px; padding: 7px 14px; font-size: 12px; cursor: pointer; text-decoration: none; }
+}
+@media print {
+  .print-bar { display: none; }
+  .report-wrapper { padding: 0; box-shadow: none; }
+}
+
+/* ── Header ── */
+.report-header { border-bottom: 3px solid #f97316; padding-bottom: 18px; margin-bottom: 22px; }
+.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+.fotus-brand { display: flex; align-items: center; gap: 10px; }
+.fotus-brand-icon { font-size: 28px; }
+.fotus-brand-text { }
+.fotus-brand-name { font-size: 16px; font-weight: 800; color: #f97316; letter-spacing: .5px; }
+.fotus-brand-sub { font-size: 9pt; color: #5a7a9a; }
+.report-meta { text-align: right; font-size: 9pt; color: #5a7a9a; line-height: 1.8; }
+.report-title { font-size: 20pt; font-weight: 800; color: #1a2535; margin-bottom: 4px; }
+.report-category { font-size: 10pt; color: #5a7a9a; }
+.verdict-box { display: flex; align-items: center; gap: 22px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 20px; margin-top: 14px; }
+.verdict-score { font-size: 40pt; font-weight: 900; line-height: 1; }
+.verdict-score.go { color: #16a34a; }
+.verdict-score.cond { color: #d97706; }
+.verdict-score.wait { color: #2563eb; }
+.verdict-score.nogo { color: #dc2626; }
+.verdict-info { flex: 1; }
+.verdict-decision { font-size: 14pt; font-weight: 800; margin-bottom: 4px; }
+.verdict-decision.go { color: #16a34a; }
+.verdict-decision.cond { color: #d97706; }
+.verdict-decision.wait { color: #2563eb; }
+.verdict-decision.nogo { color: #dc2626; }
+.verdict-confidence { font-size: 9pt; color: #5a7a9a; }
+.verdict-types { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag { display: inline-block; font-size: 8pt; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+.tag-modulos { background: #dcfce7; color: #15803d; }
+.tag-inversores { background: #ede9fe; color: #6d28d9; }
+.tag-bess { background: #fef9c3; color: #854d0e; }
+.tag-ev { background: #ffedd5; color: #9a3412; }
+.tag-outro { background: #f1f5f9; color: #475569; }
+
+/* ── Sections ── */
+.section { margin-bottom: 22px; }
+.section-title { font-size: 11pt; font-weight: 800; color: #f97316; text-transform: uppercase; letter-spacing: .8px; border-bottom: 1.5px solid #f0f0f0; padding-bottom: 6px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.section-icon { font-size: 13pt; }
+
+/* ── Profile Table ── */
+.profile-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.profile-table td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; }
+.profile-table td:first-child { font-weight: 700; color: #334155; width: 38%; background: #fafafa; }
+
+/* ── Scorecard ── */
+.score-layout { display: flex; gap: 20px; align-items: flex-start; }
+.score-chart-col { width: 240px; flex-shrink: 0; }
+.score-table-col { flex: 1; }
+.scorecard-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.scorecard-table th { background: #1a2535; color: #fff; padding: 7px 10px; text-align: left; font-weight: 700; }
+.scorecard-table td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0; }
+.scorecard-table tr:last-child td { border-bottom: none; font-weight: 800; background: #f8fafc; }
+.score-bar-mini { display: flex; align-items: center; gap: 6px; }
+.score-bar-track-mini { flex: 1; background: #e2e8f0; border-radius: 3px; height: 6px; }
+.score-bar-fill-mini { height: 6px; border-radius: 3px; }
+.fill-high { background: #16a34a; }
+.fill-mid { background: #d97706; }
+.fill-low { background: #dc2626; }
+
+/* ── Products ── */
+.product-block { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.product-block-header { background: #1a2535; color: #fff; padding: 8px 14px; display: flex; align-items: center; justify-content: space-between; }
+.product-block-title { font-size: 10pt; font-weight: 700; }
+.product-block-score { font-size: 10pt; font-weight: 700; color: #fbbf24; }
+.product-block-body { padding: 10px 14px; }
+.product-reco { font-size: 10pt; margin-bottom: 8px; }
+.models-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.models-table th { background: #f8fafc; color: #334155; font-weight: 700; padding: 5px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.models-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+.models-table tr:last-child td { border-bottom: none; }
+.product-notes { font-size: 9pt; color: #5a7a9a; margin-top: 8px; font-style: italic; }
+
+/* ── Flags & Positives ── */
+.flag-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
+.flag-item.critical { background: #fef2f2; border-left: 3px solid #dc2626; }
+.flag-item.attention { background: #fffbeb; border-left: 3px solid #d97706; }
+.flag-item.monitor { background: #eff6ff; border-left: 3px solid #2563eb; }
+.flag-icon { font-size: 12pt; flex-shrink: 0; margin-top: 1px; }
+.flag-content { font-size: 10pt; line-height: 1.5; }
+.flag-label { font-weight: 800; }
+.positive-item { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 10pt; }
+.positive-item:last-child { border-bottom: none; }
+.positive-check { color: #16a34a; font-weight: 800; flex-shrink: 0; }
+
+/* ── Recommendation ── */
+.rec-box { background: #1a2535; color: #d8eaff; border-radius: 10px; padding: 18px 20px; font-family: 'Courier New', monospace; font-size: 9.5pt; line-height: 1.7; white-space: pre-wrap; border-left: 4px solid #f97316; }
+
+/* ── Financial ── */
+.fin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fin-item { border: 1px solid #e2e8f0; border-radius: 7px; padding: 10px 12px; }
+.fin-label { font-size: 8pt; color: #5a7a9a; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.fin-value { font-size: 12pt; font-weight: 800; color: #1a2535; }
+
+/* ── Pending ── */
+.pending-item { border: 1px solid #fde68a; background: #fffbeb; border-radius: 7px; padding: 10px 14px; margin-bottom: 8px; font-size: 10pt; }
+.pending-question { font-weight: 700; color: #92400e; margin-bottom: 3px; }
+.pending-impact { color: #1a2535; }
+.pending-how { color: #5a7a9a; font-style: italic; margin-top: 3px; font-size: 9.5pt; }
+
+/* ── Footer ── */
+.report-footer { border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 28px; display: flex; justify-content: space-between; font-size: 8pt; color: #94a3b8; }
+
+/* ── Risk Matrix ── */
+.risk-badge { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 8.5pt; font-weight: 700; }
+.risk-high { background: #fef2f2; color: #dc2626; }
+.risk-mid { background: #fffbeb; color: #d97706; }
+.risk-low { background: #eff6ff; color: #2563eb; }
+
+/* ── Team Reports ── */
+.team-section { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.team-section-header { padding: 9px 14px; display: flex; align-items: center; justify-content: space-between; }
+.team-header-produtos { background: #eff6ff; border-bottom: 2px solid #bfdbfe; }
+.team-header-pricing  { background: #f0fdf4; border-bottom: 2px solid #bbf7d0; }
+.team-header-supply   { background: #faf5ff; border-bottom: 2px solid #e9d5ff; }
+.team-header-title { font-size: 10.5pt; font-weight: 800; }
+.team-header-produtos .team-header-title { color: #1d4ed8; }
+.team-header-pricing  .team-header-title { color: #15803d; }
+.team-header-supply   .team-header-title { color: #7c3aed; }
+.team-section-body { padding: 12px 14px; }
+.team-reco-badge { display: inline-block; font-size: 9pt; font-weight: 800; padding: 2px 10px; border-radius: 20px; margin-bottom: 9px; }
+.treco-go, .treco-aprovado { background: #dcfce7; color: #15803d; }
+.treco-cond, .treco-ressalva { background: #fef9c3; color: #854d0e; }
+.treco-nogo, .treco-reprovado { background: #fef2f2; color: #dc2626; }
+.t-kv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 10px; }
+.t-kv { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 5px 9px; }
+.t-kv-label { font-size: 7.5pt; color: #5a7a9a; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+.t-kv-value { font-size: 9.5pt; font-weight: 700; color: #1a2535; }
+.t-list { margin-bottom: 8px; }
+.t-list-title { font-size: 8pt; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+.t-list-title.danger  { color: #dc2626; }
+.t-list-title.success { color: #15803d; }
+.t-list-item { font-size: 9pt; color: #334155; padding: 2px 0 2px 12px; position: relative; line-height: 1.5; }
+.t-list-item::before { content: '•'; position: absolute; left: 2px; color: #94a3b8; }
+.t-summary { font-size: 9.5pt; color: #334155; line-height: 1.65; margin-bottom: 9px; font-style: italic; }
+.t-date { font-size: 7.5pt; color: #94a3b8; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<!-- ── Print bar (screen only) ── -->
+<div class="print-bar no-print">
+  <div style="display:flex;align-items:center;gap:12px">
+    <a href="/" class="btn-back">← Dashboard</a>
+    <span class="print-bar-title">Relatório: {{ m.name }}</span>
+  </div>
+  <button class="btn-print" onclick="window.print()">
+    🖨️ Imprimir / Salvar PDF
+  </button>
+</div>
+
+<div class="report-wrapper">
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════════════ -->
+{% set ra = m.raw_analysis or {} %}
+{% set mfr = ra.manufacturer or {} %}
+{% set fin = ra.financial or {} %}
+{% set pending = ra.pending_info or [] %}
+
+{% set decision = m.decision | upper %}
+{% if decision == 'GO' %}
+  {% set dec_class = 'go' %}
+  {% set dec_label = '✅ GO — Recomendar entrada no portfólio' %}
+{% elif 'CONDICIONAL' in decision %}
+  {% set dec_class = 'cond' %}
+  {% set dec_label = '⚠️ GO CONDICIONAL — Entrar com condições específicas' %}
+{% elif 'AGUARDAR' in decision %}
+  {% set dec_class = 'wait' %}
+  {% set dec_label = '🔄 AGUARDAR — Necessita mais dados ou melhorias' %}
+{% else %}
+  {% set dec_class = 'nogo' %}
+  {% set dec_label = '❌ NO-GO — Não recomendar entrada' %}
+{% endif %}
+
+<div class="report-header avoid-break">
+  <div class="header-top">
+    <div class="fotus-brand">
+      <div class="fotus-brand-icon">⚡</div>
+      <div class="fotus-brand-text">
+        <div class="fotus-brand-name">FOTUS DISTRIBUIDORA SOLAR</div>
+        <div class="fotus-brand-sub">Coordenação de Produtos — Análise de Portfólio</div>
+      </div>
+    </div>
+    <div class="report-meta">
+      <div><strong>Data da análise:</strong> {{ m.analysis_date or '—' }}</div>
+      <div><strong>Documento:</strong> Relatório de Análise de Marca</div>
+      <div><strong>Versão:</strong> Skill analise-marca v1.0</div>
+    </div>
+  </div>
+
+  <div class="report-title">{{ m.name }}</div>
+  <div class="report-category">
+    {% for pt in m.product_types %}
+      {% if pt == 'Módulos FV' %}<span class="tag tag-modulos">{{ pt }}</span>{% endif %}
+      {% if pt == 'Inversores' %}<span class="tag tag-inversores">{{ pt }}</span>{% endif %}
+      {% if pt == 'BESS' %}<span class="tag tag-bess">{{ pt }}</span>{% endif %}
+      {% if pt == 'Carregadores EV' %}<span class="tag tag-ev">{{ pt }}</span>{% endif %}
+      {% if pt == 'Outro' %}<span class="tag tag-outro">{{ pt }}</span>{% endif %}
+    {% endfor %}
+    &nbsp;· {{ m.country or '—' }}{% if m.founded %} · Fund. {{ m.founded }}{% endif %}
+  </div>
+
+  <div class="verdict-box avoid-break">
+    <div class="verdict-score {{ dec_class }}">{{ '%.1f'|format(m.score_final) }}</div>
+    <div class="verdict-info">
+      <div class="verdict-decision {{ dec_class }}">{{ dec_label }}</div>
+      <div class="verdict-confidence">Confiança na análise: {{ ra.confidence or '—' }} &nbsp;·&nbsp; Score / 10.0</div>
+      <div style="margin-top:6px;font-size:9.5pt;color:#334155;font-style:italic">
+        "{{ m.summary[:200] if m.summary else '—' }}{% if m.summary and m.summary|length > 200 %}...{% endif %}"
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{% if mfr.size %}
+<!-- ══ 0. SOBRE A MARCA ═════════════════════════════════════════════════════ -->
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">🏭</span> Sobre a Marca</div>
+  <p style="font-size:10pt;line-height:1.65;color:#334155">{{ mfr.size }}</p>
+</div>
+{% endif %}
+
+
+<!-- ══ 1. RESUMO EXECUTIVO ══════════════════════════════════════════════════ -->
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">📋</span> Resumo Executivo</div>
+  <p style="font-size:10.5pt;line-height:1.7;color:#1a2535">{{ m.summary or '—' }}</p>
+</div>
+
+
+<!-- ══ 2. PERFIL DO FABRICANTE ══════════════════════════════════════════════ -->
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">🏢</span> Perfil do Fabricante</div>
+  <table class="profile-table">
+    <tr><td>Nome completo</td><td>{{ m.name }}</td></tr>
+    {% if mfr.commercial_name and mfr.commercial_name != m.name %}<tr><td>Nome comercial</td><td>{{ mfr.commercial_name }}</td></tr>{% endif %}
+    <tr><td>País de origem</td><td>{{ m.country or '—' }}</td></tr>
+    <tr><td>Fundação</td><td>{{ m.founded or '—' }}</td></tr>
+    <tr><td>Porte</td><td>{{ mfr.size or '—' }}</td></tr>
+    <tr><td>Faturamento estimado</td><td>{{ mfr.revenue or '—' }}</td></tr>
+    <tr><td>Capacidade produtiva</td><td>{{ mfr.capacity or '—' }}</td></tr>
+    <tr><td>Funcionários</td><td>{{ mfr.employees or '—' }}</td></tr>
+    <tr><td>Presença no Brasil</td><td>{{ mfr.brazil_presence or '—' }}</td></tr>
+    <tr><td>Tipos de produto</td><td>{{ m.product_types | join(', ') or '—' }}</td></tr>
+    <tr><td>Arquivos analisados</td><td>{{ m.files | join(', ') or '—' }}</td></tr>
+  </table>
+</div>
+
+
+<!-- ══ 3. SCORECARD ═════════════════════════════════════════════════════════ -->
+<div class="section page-break avoid-break">
+  <div class="section-title"><span class="section-icon">📊</span> Scorecard de Avaliação</div>
+  <div class="score-layout">
+    <div class="score-chart-col">
+      <canvas id="radar-chart" width="220" height="220"></canvas>
+    </div>
+    <div class="score-table-col">
+      <table class="scorecard-table">
+        <thead>
+          <tr><th>Dimensão</th><th>Peso</th><th>Score</th><th>Pond.</th></tr>
+        </thead>
+        <tbody>
+          {% set dims = [
+            ('Qualidade / Tecnologia', '25%', m.score_qualidade),
+            ('Solidez do Fabricante', '20%', m.score_solidez),
+            ('Pós-venda e Suporte BR', '20%', m.score_pos_venda),
+            ('Fit com Portfólio Fotus', '15%', m.score_fit),
+            ('Potencial de Margem', '10%', m.score_margem),
+            ('Certificações e Compliance', '10%', m.score_certificacoes),
+          ] %}
+          {% for label, peso, val in dims %}
+            {% set pct = peso | replace('%','') | float / 100 %}
+            {% set pond = (val or 0) * pct %}
+            {% set fill_cls = 'fill-high' if (val or 0) >= 7 else ('fill-mid' if (val or 0) >= 5 else 'fill-low') %}
+            <tr>
+              <td>{{ label }}</td>
+              <td>{{ peso }}</td>
+              <td>
+                <div class="score-bar-mini">
+                  <div class="score-bar-track-mini">
+                    <div class="score-bar-fill-mini {{ fill_cls }}" style="width:{{ ((val or 0)/10*100)|round }}%"></div>
+                  </div>
+                  <strong>{{ '%.1f'|format(val or 0) }}</strong>
+                </div>
+              </td>
+              <td>{{ '%.2f'|format(pond) }}</td>
+            </tr>
+          {% endfor %}
+          {% if m.score_team_adj and m.score_team_adj != 0 %}
+          <tr>
+            {% set adj_color = '#16a34a' if m.score_team_adj > 0 else '#dc2626' %}
+            <td colspan="2" style="color:{{ adj_color }}">
+              👥 Ajuste Times Internos
+            </td>
+            <td colspan="2" style="color:{{ adj_color }}; font-weight:800">
+              {% if m.score_team_adj > 0 %}+{% endif %}{{ '%.2f'|format(m.score_team_adj) }}
+            </td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td colspan="2"><strong>SCORE FINAL</strong></td>
+            <td colspan="2"><strong style="font-size:13pt;color:{% if dec_class == 'go' %}#16a34a{% elif dec_class == 'cond' %}#d97706{% elif dec_class == 'wait' %}#2563eb{% else %}#dc2626{% endif %}">{{ '%.2f'|format(m.score_final) }} / 10</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;font-size:9pt;color:#334155">
+        <strong>Escala:</strong>&nbsp;
+        <span style="color:#16a34a">●</span> 9-10 Excelente &nbsp;
+        <span style="color:#16a34a">●</span> 7-8 Bom &nbsp;
+        <span style="color:#d97706">●</span> 5-6 Regular &nbsp;
+        <span style="color:#dc2626">●</span> 3-4 Fraco &nbsp;
+        <span style="color:#dc2626">●</span> 0-2 Crítico
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ 4. PORTFÓLIO DE PRODUTOS ═════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title"><span class="section-icon">📦</span> Portfólio de Produtos Avaliados</div>
+  {% for product in m.products %}
+  <div class="product-block avoid-break">
+    <div class="product-block-header">
+      <div class="product-block-title">{{ product.category }} · {{ product.technology or '' }}{% if product.segment %} · {{ product.segment }}{% endif %}</div>
+      <div class="product-block-score">Score: {{ '%.1f'|format(product.score or 0) }} / 10</div>
+    </div>
+    <div class="product-block-body">
+      <div class="product-reco">{{ product.recommendation or '' }}</div>
+      {% if product.models %}
+      <table class="models-table">
+        <thead>
+          <tr>
+            <th>Modelo</th><th>Potência</th><th>Eficiência</th>
+            <th>Gar. Produto</th><th>Gar. Performance</th>
+            <th>Certif.</th><th>Preço</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for mod in product.models %}
+          <tr>
+            <td><strong>{{ mod.name or '—' }}</strong></td>
+            <td>{{ ((mod.power_kw or 0)*1000)|round|int }}W</td>
+            <td>{{ mod.efficiency_pct or '—' }}%</td>
+            <td>{{ mod.warranty_product_years or '—' }} anos</td>
+            <td>{{ mod.warranty_performance_years or '—' }} anos / {{ mod.degradation_per_year_pct or '—' }}%/ano</td>
+            <td style="font-size:8.5pt">{{ (mod.certifications or [])|join(', ') or '—' }}</td>
+            <td>{{ mod.price_range or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if product.notes %}<div class="product-notes">Obs: {{ product.notes }}</div>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p style="color:#5a7a9a;font-size:10pt">Nenhum produto detalhado disponível.</p>
+  {% endfor %}
+</div>
+
+
+<!-- ══ 5. ANÁLISE FINANCEIRA ════════════════════════════════════════════════ -->
+{% if fin %}
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">💰</span> Análise Financeira</div>
+  <div class="fin-grid">
+    {% if fin.estimated_monthly_volume %}<div class="fin-item"><div class="fin-label">Volume Mensal Est.</div><div class="fin-value">{{ fin.estimated_monthly_volume }}</div></div>{% endif %}
+    {% if fin.estimated_avg_price_brl %}<div class="fin-item"><div class="fin-label">Preço Médio Venda</div><div class="fin-value">{{ fin.estimated_avg_price_brl }}</div></div>{% endif %}
+    {% if fin.estimated_annual_revenue_brl %}<div class="fin-item"><div class="fin-label">Receita Anual Est.</div><div class="fin-value">{{ fin.estimated_annual_revenue_brl }}</div></div>{% endif %}
+    {% if fin.estimated_margin_pct %}<div class="fin-item"><div class="fin-label">Margem Bruta Est.</div><div class="fin-value">{{ fin.estimated_margin_pct }}</div></div>{% endif %}
+    {% if fin.moq %}<div class="fin-item"><div class="fin-label">MOQ</div><div class="fin-value">{{ fin.moq }}</div></div>{% endif %}
+    {% if fin.payback_months %}<div class="fin-item"><div class="fin-label">Payback Estoque</div><div class="fin-value">{{ fin.payback_months }}</div></div>{% endif %}
+    {% if fin.working_capital_needed %}<div class="fin-item"><div class="fin-label">Capital de Giro</div><div class="fin-value">{{ fin.working_capital_needed }}</div></div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+
+<!-- ══ 6. RED FLAGS ═════════════════════════════════════════════════════════ -->
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">🚩</span> Red Flags Identificados</div>
+  {% if m.red_flags %}
+    {% for flag in m.red_flags %}
+      {% set sev = flag.severity | upper %}
+      {% if 'CRÍTICO' in sev or 'CRITICO' in sev %}
+        <div class="flag-item critical">
+          <div class="flag-icon">🔴</div>
+          <div class="flag-content"><span class="flag-label">CRÍTICO:</span> {{ flag.description }}</div>
+        </div>
+      {% elif 'ATENÇÃO' in sev or 'ATENCAO' in sev %}
+        <div class="flag-item attention">
+          <div class="flag-icon">🟡</div>
+          <div class="flag-content"><span class="flag-label">ATENÇÃO:</span> {{ flag.description }}</div>
+        </div>
+      {% else %}
+        <div class="flag-item monitor">
+          <div class="flag-icon">🟢</div>
+          <div class="flag-content"><span class="flag-label">MONITORAR:</span> {{ flag.description }}</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    <p style="color:#5a7a9a;font-size:10pt;padding:8px 12px;background:#f0fdf4;border-radius:6px">✅ Nenhum red flag crítico identificado na análise.</p>
+  {% endif %}
+</div>
+
+
+<!-- ══ 7. PONTOS POSITIVOS ══════════════════════════════════════════════════ -->
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">✅</span> Pontos Positivos Verificados</div>
+  {% if m.positives %}
+    {% for pos in m.positives %}
+    <div class="positive-item"><span class="positive-check">✓</span> {{ pos }}</div>
+    {% endfor %}
+  {% else %}
+    <p style="color:#5a7a9a;font-size:10pt">Sem pontos positivos registrados.</p>
+  {% endif %}
+</div>
+
+
+<!-- ══ 8. RECOMENDAÇÃO EXECUTIVA ════════════════════════════════════════════ -->
+<div class="section page-break avoid-break">
+  <div class="section-title"><span class="section-icon">🎯</span> Recomendação Executiva</div>
+  {% if m.recommendation %}
+  <div class="rec-box">{{ m.recommendation }}</div>
+  {% else %}
+  <p style="color:#5a7a9a;font-size:10pt">Recomendação não disponível.</p>
+  {% endif %}
+</div>
+
+
+<!-- ══ 9. INFORMAÇÕES PENDENTES ═════════════════════════════════════════════ -->
+{% if pending %}
+<div class="section avoid-break">
+  <div class="section-title"><span class="section-icon">❓</span> Informações Ainda Pendentes</div>
+  {% for item in pending %}
+  <div class="pending-item">
+    <div class="pending-question">⚠ {{ item.info }}</div>
+    <div class="pending-impact"><strong>Impacto se negativa:</strong> {{ item.impact }}</div>
+    <div class="pending-how">→ {{ item.how_to_get }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+
+<!-- ══ ANÁLISES INTERNAS ════════════════════════════════════════════════════ -->
+{% if team_reports %}
+<div class="section page-break">
+  <div class="section-title"><span class="section-icon">👥</span> Análises Internas Fotus</div>
+
+  {% if team_reports.get('produtos') %}
+  {% set tp = team_reports['produtos'] %}
+  {% set ta = tp.analysis %}
+  <div class="team-section avoid-break">
+    <div class="team-section-header team-header-produtos">
+      <div class="team-header-title">🧪 Time de Produtos</div>
+      {% if tp.created_at %}<div style="font-size:8pt;color:#5a7a9a">{{ tp.created_at }}</div>{% endif %}
+    </div>
+    <div class="team-section-body">
+      {% if ta.recommendation %}
+        {% if 'ressalva' in ta.recommendation|lower %}{% set rcls = 'treco-ressalva' %}
+        {% elif 'aprovado' in ta.recommendation|lower %}{% set rcls = 'treco-aprovado' %}
+        {% else %}{% set rcls = 'treco-reprovado' %}{% endif %}
+        <span class="team-reco-badge {{ rcls }}">{{ ta.recommendation }}</span>
+      {% endif %}
+      {% if ta.summary %}<p class="t-summary">{{ ta.summary }}</p>{% endif %}
+      {% if ta.spec_compliance or ta.risk_level %}
+      <div class="t-kv-grid">
+        {% if ta.spec_compliance %}<div class="t-kv"><div class="t-kv-label">Conformidade</div><div class="t-kv-value">{{ ta.spec_compliance }}</div></div>{% endif %}
+        {% if ta.risk_level %}<div class="t-kv"><div class="t-kv-label">Nível de Risco</div><div class="t-kv-value">{{ ta.risk_level }}</div></div>{% endif %}
+      </div>
+      {% endif %}
+      {% if ta.divergences %}
+      <div class="t-list"><div class="t-list-title danger">Divergências Identificadas</div>
+        {% for d in ta.divergences %}<div class="t-list-item">{{ d }}</div>{% endfor %}
+      </div>{% endif %}
+      {% if ta.highlights %}
+      <div class="t-list"><div class="t-list-title success">Destaques Técnicos</div>
+        {% for h in ta.highlights %}<div class="t-list-item">{{ h }}</div>{% endfor %}
+      </div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if team_reports.get('pricing') %}
+  {% set tp = team_reports['pricing'] %}
+  {% set ta = tp.analysis %}
+  <div class="team-section avoid-break">
+    <div class="team-section-header team-header-pricing">
+      <div class="team-header-title">💰 Time de Pricing</div>
+      {% if tp.created_at %}<div style="font-size:8pt;color:#5a7a9a">{{ tp.created_at }}</div>{% endif %}
+    </div>
+    <div class="team-section-body">
+      {% if ta.recommendation %}
+        {% if ta.recommendation == 'GO' %}{% set rcls = 'treco-go' %}
+        {% elif 'CONDICIONAL' in ta.recommendation %}{% set rcls = 'treco-cond' %}
+        {% else %}{% set rcls = 'treco-nogo' %}{% endif %}
+        <span class="team-reco-badge {{ rcls }}">{{ ta.recommendation }}</span>
+      {% endif %}
+      {% if ta.summary %}<p class="t-summary">{{ ta.summary }}</p>{% endif %}
+      {% if ta.cost_price or ta.suggested_sale_price or ta.estimated_margin_pct or ta.margin_assessment %}
+      <div class="t-kv-grid">
+        {% if ta.cost_price %}<div class="t-kv"><div class="t-kv-label">Preço de Custo</div><div class="t-kv-value">{{ ta.cost_price }}</div></div>{% endif %}
+        {% if ta.suggested_sale_price %}<div class="t-kv"><div class="t-kv-label">Preço de Venda</div><div class="t-kv-value">{{ ta.suggested_sale_price }}</div></div>{% endif %}
+        {% if ta.estimated_margin_pct %}<div class="t-kv"><div class="t-kv-label">Margem Est.</div><div class="t-kv-value">{{ ta.estimated_margin_pct }}</div></div>{% endif %}
+        {% if ta.margin_assessment %}<div class="t-kv"><div class="t-kv-label">Avaliação</div><div class="t-kv-value">{{ ta.margin_assessment }}</div></div>{% endif %}
+      </div>
+      {% endif %}
+      {% if ta.pricing_risks %}
+      <div class="t-list"><div class="t-list-title danger">Riscos de Pricing</div>
+        {% for r in ta.pricing_risks %}<div class="t-list-item">{{ r }}</div>{% endfor %}
+      </div>{% endif %}
+      {% if ta.opportunities %}
+      <div class="t-list"><div class="t-list-title success">Oportunidades</div>
+        {% for o in ta.opportunities %}<div class="t-list-item">{{ o }}</div>{% endfor %}
+      </div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if team_reports.get('supply') %}
+  {% set tp = team_reports['supply'] %}
+  {% set ta = tp.analysis %}
+  <div class="team-section avoid-break">
+    <div class="team-section-header team-header-supply">
+      <div class="team-header-title">🚚 Supply Chain</div>
+      {% if tp.created_at %}<div style="font-size:8pt;color:#5a7a9a">{{ tp.created_at }}</div>{% endif %}
+    </div>
+    <div class="team-section-body">
+      {% if ta.recommendation %}
+        {% if ta.recommendation == 'GO' %}{% set rcls = 'treco-go' %}
+        {% elif 'CONDICIONAL' in ta.recommendation %}{% set rcls = 'treco-cond' %}
+        {% else %}{% set rcls = 'treco-nogo' %}{% endif %}
+        <span class="team-reco-badge {{ rcls }}">{{ ta.recommendation }}</span>
+      {% endif %}
+      {% if ta.summary %}<p class="t-summary">{{ ta.summary }}</p>{% endif %}
+      {% if ta.lead_time_days or ta.moq or ta.stock_availability or ta.incoterm %}
+      <div class="t-kv-grid">
+        {% if ta.lead_time_days %}<div class="t-kv"><div class="t-kv-label">Lead Time</div><div class="t-kv-value">{{ ta.lead_time_days }}</div></div>{% endif %}
+        {% if ta.moq %}<div class="t-kv"><div class="t-kv-label">MOQ</div><div class="t-kv-value">{{ ta.moq }}</div></div>{% endif %}
+        {% if ta.stock_availability %}<div class="t-kv"><div class="t-kv-label">Disponibilidade</div><div class="t-kv-value">{{ ta.stock_availability }}</div></div>{% endif %}
+        {% if ta.incoterm %}<div class="t-kv"><div class="t-kv-label">Incoterm</div><div class="t-kv-value">{{ ta.incoterm }}</div></div>{% endif %}
+      </div>
+      {% endif %}
+      {% if ta.logistics_risks %}
+      <div class="t-list"><div class="t-list-title danger">Riscos Logísticos</div>
+        {% for r in ta.logistics_risks %}<div class="t-list-item">{{ r }}</div>{% endfor %}
+      </div>{% endif %}
+      {% if ta.supply_strengths %}
+      <div class="t-list"><div class="t-list-title success">Pontos Fortes</div>
+        {% for s in ta.supply_strengths %}<div class="t-list-item">{{ s }}</div>{% endfor %}
+      </div>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+
+
+<!-- ══ FOOTER ═══════════════════════════════════════════════════════════════ -->
+<div class="report-footer">
+  <span>Fotus Distribuidora Solar — Análise de Portfólio Estratégico</span>
+  <span>{{ m.name }} · {{ m.analysis_date or '—' }} · Skill analise-marca v1.0</span>
+</div>
+
+</div><!-- /.report-wrapper -->
+
+<script>
+// Render radar chart then trigger print if ?print=1
+window.addEventListener('load', function() {
+  const ctx = document.getElementById('radar-chart');
+  if (!ctx) return;
+
+  new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Qualidade', 'Solidez', 'Pós-Venda BR', 'Fit Portfolio', 'Margem', 'Certificações'],
+      datasets: [{
+        label: '{{ m.name | replace("'", "\\'") }}',
+        data: [
+          {{ m.score_qualidade or 0 }},
+          {{ m.score_solidez or 0 }},
+          {{ m.score_pos_venda or 0 }},
+          {{ m.score_fit or 0 }},
+          {{ m.score_margem or 0 }},
+          {{ m.score_certificacoes or 0 }}
+        ],
+        borderColor: '#f97316',
+        backgroundColor: 'rgba(249,115,22,0.15)',
+        pointBackgroundColor: '#f97316',
+        borderWidth: 2,
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          min: 0, max: 10,
+          ticks: { stepSize: 2, color: '#5a7a9a', font: { size: 9 } },
+          grid: { color: '#e2e8f0' },
+          pointLabels: { color: '#334155', font: { size: 10, weight: '600' } },
+          angleLines: { color: '#e2e8f0' }
+        }
+      },
+      plugins: { legend: { display: false } },
+      responsive: false,
+    }
+  });
+});
+</script>
+</body>
+</html>

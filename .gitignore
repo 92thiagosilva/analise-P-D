@@ -1,0 +1,19 @@
+# Segredos — nunca commitar
+.env
+
+# Ambiente virtual Python
+.venv/
+__pycache__/
+*.pyc
+
+# Documentos originais enviados por fabricante (grandes demais para o GitHub;
+# compartilhados separadamente — ver INSTALACAO.md)
+uploads/
+
+# Sistema de wiki interno não relacionado a esta aplicação
+wiki/
+raw/
+CLAUDE.md
+
+# Config local do Claude Code
+.claude/

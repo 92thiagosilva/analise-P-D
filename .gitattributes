@@ -1,0 +1,5 @@
+*.pdf -text -diff binary
+*.db -text -diff binary
+*.png binary
+*.jpg binary
+*.jpeg binary
