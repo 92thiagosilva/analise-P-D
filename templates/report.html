@@ -189,6 +189,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a25
 {% set mfr = ra.manufacturer or {} %}
 {% set fin = ra.financial or {} %}
 {% set pending = ra.pending_info or [] %}
+{% set new_schema = ra.scores and ra.scores.fabricante %}
+{% set cat_scores = ra.scores or {} %}
 
 {% set decision = m.decision | upper %}
 {% if decision == 'GO' %}
@@ -294,32 +296,67 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1a25
           <tr><th>Dimensão</th><th>Peso</th><th>Score</th><th>Pond.</th></tr>
         </thead>
         <tbody>
-          {% set dims = [
-            ('Qualidade / Tecnologia', '25%', m.score_qualidade),
-            ('Solidez do Fabricante', '20%', m.score_solidez),
-            ('Pós-venda e Suporte BR', '20%', m.score_pos_venda),
-            ('Fit com Portfólio Fotus', '15%', m.score_fit),
-            ('Potencial de Margem', '10%', m.score_margem),
-            ('Certificações e Compliance', '10%', m.score_certificacoes),
-          ] %}
-          {% for label, peso, val in dims %}
-            {% set pct = peso | replace('%','') | float / 100 %}
-            {% set pond = (val or 0) * pct %}
-            {% set fill_cls = 'fill-high' if (val or 0) >= 7 else ('fill-mid' if (val or 0) >= 5 else 'fill-low') %}
-            <tr>
-              <td>{{ label }}</td>
-              <td>{{ peso }}</td>
-              <td>
-                <div class="score-bar-mini">
-                  <div class="score-bar-track-mini">
-                    <div class="score-bar-fill-mini {{ fill_cls }}" style="width:{{ ((val or 0)/10*100)|round }}%"></div>
+          {% if new_schema %}
+            {% set categories = [
+              ('fabricante', 'Fabricante', [('pos_venda_brasil','Pós-venda Brasil','30%'), ('solidez_fabricante','Solidez do Fabricante','25%'), ('reputacao','Reputação','15%'), ('marketshare_nacional','Marketshare Nacional','15%'), ('marketshare_mundial','Marketshare Mundial','15%')]),
+              ('produto', 'Produto', [('certificacoes_nacionais','Certificações Nacionais','20%'), ('qualidade_tecnica','Qualidade Técnica','20%'), ('tecnologia','Tecnologia','15%'), ('certificacoes_internacionais','Certificações Internacionais','15%'), ('garantia','Garantia','15%'), ('rma','RMA','15%')]),
+              ('mercado', 'Mercado', [('potencial_margem','Potencial de Margem','30%'), ('fit_portfolio','Fit Portfólio Fotus','25%'), ('canal_vendas','Canal de Vendas','15%'), ('barreira_entrada','Barreira de Entrada','15%'), ('moq','MOQ','15%')]),
+            ] %}
+            {% for cat_key, cat_label, subs in categories %}
+              {% set sub_scores = cat_scores.get(cat_key, {}) %}
+              {% set cat_val = (m.score_fabricante if cat_key == 'fabricante' else (m.score_produto if cat_key == 'produto' else m.score_mercado)) %}
+              <tr style="background:#f8fafc">
+                <td colspan="2"><strong>{{ cat_label }}</strong></td>
+                <td colspan="2"><strong>{{ '%.1f'|format(cat_val or 0) }}</strong></td>
+              </tr>
+              {% for sub_key, sub_label, sub_peso in subs %}
+                {% set sub_val = sub_scores.get(sub_key, 0) %}
+                {% set sub_pct = sub_peso | replace('%','') | float / 100 %}
+                {% set sub_pond = (sub_val or 0) * sub_pct %}
+                {% set fill_cls = 'fill-high' if (sub_val or 0) >= 7 else ('fill-mid' if (sub_val or 0) >= 5 else 'fill-low') %}
+                <tr>
+                  <td style="padding-left:18px;color:#5a7a9a">{{ sub_label }}</td>
+                  <td>{{ sub_peso }}</td>
+                  <td>
+                    <div class="score-bar-mini">
+                      <div class="score-bar-track-mini">
+                        <div class="score-bar-fill-mini {{ fill_cls }}" style="width:{{ ((sub_val or 0)/10*100)|round }}%"></div>
+                      </div>
+                      <strong>{{ '%.1f'|format(sub_val or 0) }}</strong>
+                    </div>
+                  </td>
+                  <td>{{ '%.2f'|format(sub_pond) }}</td>
+                </tr>
+              {% endfor %}
+            {% endfor %}
+          {% else %}
+            {% set dims = [
+              ('Qualidade / Tecnologia', '25%', m.score_qualidade),
+              ('Solidez do Fabricante', '20%', m.score_solidez),
+              ('Pós-venda e Suporte BR', '20%', m.score_pos_venda),
+              ('Fit com Portfólio Fotus', '15%', m.score_fit),
+              ('Potencial de Margem', '10%', m.score_margem),
+              ('Certificações e Compliance', '10%', m.score_certificacoes),
+            ] %}
+            {% for label, peso, val in dims %}
+              {% set pct = peso | replace('%','') | float / 100 %}
+              {% set pond = (val or 0) * pct %}
+              {% set fill_cls = 'fill-high' if (val or 0) >= 7 else ('fill-mid' if (val or 0) >= 5 else 'fill-low') %}
+              <tr>
+                <td>{{ label }}</td>
+                <td>{{ peso }}</td>
+                <td>
+                  <div class="score-bar-mini">
+                    <div class="score-bar-track-mini">
+                      <div class="score-bar-fill-mini {{ fill_cls }}" style="width:{{ ((val or 0)/10*100)|round }}%"></div>
+                    </div>
+                    <strong>{{ '%.1f'|format(val or 0) }}</strong>
                   </div>
-                  <strong>{{ '%.1f'|format(val or 0) }}</strong>
-                </div>
-              </td>
-              <td>{{ '%.2f'|format(pond) }}</td>
-            </tr>
-          {% endfor %}
+                </td>
+                <td>{{ '%.2f'|format(pond) }}</td>
+              </tr>
+            {% endfor %}
+          {% endif %}
           {% if m.score_team_adj and m.score_team_adj != 0 %}
           <tr>
             {% set adj_color = '#16a34a' if m.score_team_adj > 0 else '#dc2626' %}
@@ -609,6 +646,35 @@ window.addEventListener('load', function() {
   const ctx = document.getElementById('radar-chart');
   if (!ctx) return;
 
+  {% if new_schema %}
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Fabricante', 'Produto', 'Mercado'],
+      datasets: [{
+        label: '{{ m.name | replace("'", "\\'") }}',
+        data: [
+          {{ m.score_fabricante or 0 }},
+          {{ m.score_produto or 0 }},
+          {{ m.score_mercado or 0 }}
+        ],
+        backgroundColor: 'rgba(249,115,22,0.6)',
+        borderColor: '#f97316',
+        borderWidth: 1.5,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      scales: {
+        x: { min: 0, max: 10, ticks: { color: '#5a7a9a', font: { size: 9 } }, grid: { color: '#e2e8f0' } },
+        y: { ticks: { color: '#334155', font: { size: 10, weight: '600' } }, grid: { display: false } },
+      },
+      plugins: { legend: { display: false } },
+      responsive: false,
+    }
+  });
+  {% else %}
   new Chart(ctx, {
     type: 'radar',
     data: {
@@ -644,6 +710,7 @@ window.addEventListener('load', function() {
       responsive: false,
     }
   });
+  {% endif %}
 });
 </script>
 </body>

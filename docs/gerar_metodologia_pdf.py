@@ -178,7 +178,8 @@ story.append(p(
     "(módulos, inversores, BESS, carregadores EV) antes de decisões de entrada de portfólio. O usuário "
     "envia os documentos comerciais/técnicos do fabricante (datasheets, manuais, certificados, registros "
     "INMETRO, apresentações comerciais) e a aplicação usa um modelo de linguagem (Claude, da Anthropic) "
-    "para produzir uma análise crítica estruturada, com pontuação em 6 dimensões, uma decisão recomendada "
+    "para produzir uma análise crítica estruturada, com pontuação em 3 categorias (Fabricante, Produto e "
+    "Mercado), uma decisão recomendada "
     "(GO / GO CONDICIONAL / AGUARDAR / NO-GO) e um relatório executivo."
 ))
 story.append(p(
@@ -292,61 +293,111 @@ story.append(PageBreak())
 # ── 5. METODOLOGIA DE PONTUAÇÃO ──────────────────────────────────────────────
 story += h1("5. Metodologia de Pontuação — a Régua de Avaliação")
 story.append(p(
-    "A nota final é composta por 6 dimensões, cada uma pontuada de 0 a 10, com pesos fixos. "
-    "O princípio geral declarado no prompt é: <b>na ausência de evidência, pontue para baixo</b> "
-    "— um fabricante desconhecido sem dados verificáveis no documento não pode receber nota alta."
+    "A nota final é composta por <b>3 categorias de peso igual (1/3 cada)</b> — Fabricante, Produto e "
+    "Mercado — e cada categoria é, por sua vez, a média ponderada de várias dimensões próprias (16 no "
+    "total). O princípio geral declarado no prompt continua o mesmo de sempre: <b>na ausência de "
+    "evidência, pontue para baixo</b> — um fabricante desconhecido sem dados verificáveis no documento "
+    "não pode receber nota alta em nenhuma dimensão."
+))
+story.append(warn_box(
+    "Evolução do modelo de pontuação",
+    "Esta é a segunda versão da metodologia. A primeira versão usava 6 dimensões com pesos diretos sobre "
+    "o score final (Qualidade 25%, Solidez 20%, Pós-venda 20%, Fit 15%, Margem 10%, Certificações 10%). "
+    "Fabricantes analisados sob a versão anterior <b>continuam com os dados antigos preservados</b> e "
+    "aparecem no dashboard com o layout de 6 dimensões; a aplicação identifica automaticamente qual "
+    "versão cada fabricante usa e escolhe o layout certo — não há necessidade de reprocessar os antigos, "
+    "embora seja possível fazê-lo enviando os documentos de novo (\"Adicionar Arquivos\") para trazê-los "
+    "para o modelo atual.",
 ))
 story.append(simple_table(
-    ["Dimensão", "Peso"],
+    ["Categoria", "Peso no score final", "O que avalia"],
     [
-        ["Qualidade / Tecnologia", "25%"],
-        ["Solidez do Fabricante", "20%"],
-        ["Pós-venda Brasil (dimensão crítica)", "20%"],
-        ["Fit com Portfólio Fotus", "15%"],
-        ["Potencial de Margem", "10%"],
-        ["Certificações e Compliance", "10%"],
+        ["Fabricante", "33%", "Reputação, solidez financeira, pós-venda e presença de mercado da EMPRESA"],
+        ["Produto", "33%", "Qualidade técnica, tecnologia, garantia, RMA e certificações da LINHA DE PRODUTO"],
+        ["Mercado", "34%", "Atratividade comercial da linha para a Fotus como distribuidor"],
     ],
-    col_widths=[120 * mm, 40 * mm],
+    col_widths=[35 * mm, 40 * mm, 85 * mm],
 ))
 story.append(Spacer(1, 4))
 
-story += rubric_dimension("5.1 Qualidade / Tecnologia", "25%", [
-    ["9–10", "PVEL Top Performers com evidência; eficiência celular ≥23% (TOPCon) ou ≥24% (HJT); degradação ≤0,4%/ano; histórico de confiabilidade comprovado"],
-    ["7–8", "Certificações IEC completas visíveis no documento; eficiência compatível com o mercado 2025–2026; garantia ≥25 anos com termos claros"],
-    ["5–6", "Certificações básicas presentes; eficiência aceitável; garantia entre 10 e 25 anos; poucos dados de confiabilidade"],
-    ["3–4", "Certificações não visíveis ou só mencionadas sem número; eficiência abaixo da média; garantia ≤10 anos ou com restrições"],
-    ["0–2", "Nenhuma certificação comprovada; dados técnicos implausíveis/contraditórios; qualquer menção a falhas em campo"],
-], extra_notes=["Atenção: eficiência declarada acima de 24% para módulos sem prova de tecnologia HJT é tratada como red flag de exagero."])
-
-story += rubric_dimension("5.2 Solidez do Fabricante", "20%", [
-    ["9–10", "Top-10 global comprovado (JinkoSolar / LONGi / Trina / Canadian / JA Solar / Risen / BYD); receita > USD 3 bi documentada; capacidade > 30 GW/ano; > 10 anos de mercado"],
-    ["7–8", "Fabricante estabelecido; receita USD 500 mi–3 bi documentada; capacidade 5–30 GW/ano; 5–10 anos com histórico verificável"],
+story.append(h2("5.1 Categoria FABRICANTE"))
+story += rubric_dimension("Pós-venda Brasil", "30% da categoria — dimensão crítica", [
+    ["9–10", "Escritório próprio no Brasil com endereço; equipe técnica local certificada; RMA institucional ≤15 dias documentado; estoque de peças no Brasil"],
+    ["7–8", "Representante técnico dedicado no Brasil, com nome/contato; processo documentado em 15–30 dias"],
+    ["5–6", "Representante comercial (não técnico) no Brasil; suporte via importação 30–60 dias; suporte remoto apenas"],
+    ["3–4", "Sem representação local documentada; suporte só em inglês/chinês; processo vago"],
+    ["0–2", "Nenhuma menção a suporte no Brasil; garantia de execução duvidosa"],
+], extra_notes=[
+    "Regra de penalidade obrigatória: se pós-venda Brasil for ≤ 5,0, o sistema subtrai 1,0 ponto do score final (fora do cálculo por categoria).",
+    "Se o documento não menciona nada sobre o Brasil, esta dimensão é automaticamente ≤3.",
+])
+story += rubric_dimension("Solidez do Fabricante", "25% da categoria", [
+    ["9–10", "Top-10 global comprovado (JinkoSolar/LONGi/Trina/Canadian/JA Solar/Risen/BYD); receita > USD 3 bi; capacidade > 30 GW/ano; > 10 anos de mercado"],
+    ["7–8", "Fabricante estabelecido; receita USD 500 mi–3 bi; capacidade 5–30 GW/ano; 5–10 anos verificável"],
     ["5–6", "Porte médio com alguns dados financeiros; capacidade 1–5 GW/ano; 3–5 anos; dados parcialmente verificáveis"],
     ["3–4", "Fabricante pequeno; < 3 anos ou mudança recente de controle; pouca informação pública"],
-    ["0–2", "Sem dados financeiros ou de capacidade; endereço/histórico não verificável; suspeita de rebranding"],
-], extra_notes=["Atenção: se o documento não menciona faturamento, capacidade ou anos de mercado, presume-se porte pequeno (nota ≤5)."])
-
-story += rubric_dimension("5.3 Pós-venda Brasil (dimensão crítica)", "20%", [
-    ["9–10", "Escritório próprio no Brasil com endereço; equipe técnica local certificada; RMA ≤15 dias documentado; estoque de peças no Brasil"],
-    ["7–8", "Representante técnico dedicado no Brasil, com nome/contato; processo de RMA documentado em 15–30 dias"],
-    ["5–6", "Representante comercial (não técnico) no Brasil; RMA via importação em 30–60 dias; suporte remoto apenas"],
-    ["3–4", "Sem representação local documentada; suporte só em inglês/chinês; processo de RMA vago"],
-    ["0–2", "Nenhuma menção a suporte no Brasil; garantia de execução duvidosa; nenhum canal local definido"],
-], extra_notes=[
-    "Regra de penalidade obrigatória: se a nota de pós-venda Brasil for ≤ 5,0, o sistema subtrai 1,0 ponto do score final (independentemente das demais notas).",
-    "Se o documento não menciona nada sobre o Brasil, a nota desta dimensão é automaticamente ≤3.",
+    ["0–2", "Sem dados financeiros/capacidade; endereço ou histórico não verificável; suspeita de rebranding"],
+], extra_notes=["Se o documento não menciona faturamento, capacidade ou anos de mercado, presume-se porte pequeno (≤5)."])
+story += rubric_dimension("Reputação", "15% da categoria", [
+    ["9–10", "Reputação sustentada por dados de terceiros verificáveis no documento (ranking setorial com fonte, certificação de qualidade de terceiros, cases nomeados)"],
+    ["5–6", "Menções razoáveis, parcialmente verificáveis, sem exageros evidentes"],
+    ["0–2", "Só \"somos líderes/referência\" sem qualquer dado de suporte — marketing puro"],
+])
+story += rubric_dimension("Marketshare Nacional", "15% da categoria", [
+    ["9–10", "Posição de mercado no Brasil comprovada por dado numérico ou fonte externa citada no documento"],
+    ["5–6", "Presença mencionada mas sem número que comprove posição relativa"],
+    ["0–2", "Nenhuma informação de posição de mercado no Brasil"],
+])
+story += rubric_dimension("Marketshare Mundial", "15% da categoria", [
+    ["9–10", "Posição global comprovada por dado numérico (GW instalados, ranking setorial, market share %) com fonte"],
+    ["5–6", "Presença global mencionada sem número que comprove a posição"],
+    ["0–2", "Nenhuma informação de posição de mercado global"],
 ])
 
-story += rubric_dimension("5.4 Fit com Portfólio Fotus", "15%", [
-    ["9–10", "Preenche gap estratégico claro; não canibaliza nenhum fornecedor atual forte"],
-    ["7–8", "Complementa o portfólio com diferencial claro; sobreposição gerenciável"],
-    ["5–6", "Sobreposição significativa com portfólio atual; justificável como alternativa de negociação"],
-    ["3–4", "Alta canibalização de fornecedor atual sem vantagem técnica/comercial clara"],
-    ["0–2", "Duplicação pura; produto fora do escopo da Fotus; nicho sem demanda real dos integradores"],
-], extra_notes=["Gaps prioritários definidos hoje no prompt: BESS residencial/C&amp;I, carregadores EV com INMETRO, inversores com pós-venda melhor que o atual, módulos TOPCon Tier-1 com margem melhor."])
+story.append(PageBreak())
+story.append(h2("5.2 Categoria PRODUTO"))
+story += rubric_dimension("Certificações Nacionais (INMETRO)", "20% da categoria", [
+    ["9–10", "INMETRO válido com número de registro visível para todos os modelos relevantes"],
+    ["7–8", "INMETRO mencionado com prazo documentado para a maioria dos modelos"],
+    ["5–6", "INMETRO declarado sem número/prazo, ou válido só para parte da linha"],
+    ["3–4", "INMETRO ausente sem qualquer plano mencionado"],
+    ["0–2", "Ausência total de INMETRO para produto que se conecta à rede elétrica"],
+])
+story += rubric_dimension("Qualidade Técnica", "20% da categoria", [
+    ["9–10", "Eficiência/performance no topo do mercado 2025-2026 com dados plausíveis; histórico de confiabilidade comprovado (PVEL, testes de terceiros)"],
+    ["7–8", "Especificações compatíveis com o mercado atual, certificações IEC completas visíveis"],
+    ["5–6", "Especificações aceitáveis, poucos dados de confiabilidade"],
+    ["3–4", "Dados técnicos incompletos ou abaixo da média"],
+    ["0–2", "Dados implausíveis/contraditórios, ou qualquer menção a falhas em campo"],
+], extra_notes=["Eficiência declarada acima do limite físico plausível para a tecnologia (ex.: >24% em módulo sem prova de HJT) é red flag de exagero."])
+story += rubric_dimension("Tecnologia", "15% da categoria", [
+    ["9–10", "Tecnologia de geração atual (TOPCon/HJT top-tier, LFP, etc.) com evidência de adoção real no produto"],
+    ["5–6", "Tecnologia aceitável mas não mais o estado da arte"],
+    ["0–2", "Tecnologia claramente defasada ou não identificável no documento"],
+])
+story += rubric_dimension("Certificações Internacionais (IEC/UL/etc.)", "15% da categoria", [
+    ["9–10", "Todas as certificações internacionais obrigatórias para a categoria visíveis com número de certificado"],
+    ["5–6", "Certificações internacionais parciais ou sem número"],
+    ["0–2", "Ausência de certificações internacionais básicas exigíveis pela categoria de produto"],
+], extra_notes=[
+    "Obrigatórias por categoria hoje no prompt — Módulos FV: IEC 61215 + IEC 61730. Inversores on-grid: "
+    "IEC 62116 + IEC 61683. BESS: IEC 62619 + UN 38.3. Carregadores EV AC: IEC 61851-1.",
+])
+story += rubric_dimension("Garantia", "15% da categoria", [
+    ["9–10", "Prazo de garantia de produto E de performance claramente definidos em anos, com termos e exclusões explícitos"],
+    ["5–6", "Prazo mencionado mas termos vagos ou incompletos"],
+    ["0–2", "Nenhum prazo de garantia encontrado no documento"],
+])
+story += rubric_dimension("RMA", "15% da categoria", [
+    ["9–10", "Processo de RMA do produto documentado com prazo e critérios claros de aceite"],
+    ["5–6", "Processo mencionado de forma genérica, sem prazo"],
+    ["0–2", "Nenhum processo de RMA descrito no documento"],
+], extra_notes=["Refere-se ao processo de troca/garantia do PRODUTO especificamente — distinto do pós-venda institucional da categoria Fabricante."])
 
-story += rubric_dimension("5.5 Potencial de Margem", "10%", [
-    ["9–10", "Margem acima do target ideal + exclusividade possível + política de preço favorável documentada"],
+story.append(PageBreak())
+story.append(h2("5.3 Categoria MERCADO"))
+story += rubric_dimension("Potencial de Margem", "30% da categoria", [
+    ["9–10", "Margem estimada acima do target ideal + exclusividade possível + política de preço favorável documentada"],
     ["7–8", "Margem entre o target mínimo e o ideal; política de preço estável"],
     ["5–6", "Margem no limite do target mínimo; canal concorrido"],
     ["3–4", "Margem abaixo do target mínimo; fabricante comprime o distribuidor"],
@@ -356,34 +407,52 @@ story += rubric_dimension("5.5 Potencial de Margem", "10%", [
     "Targets ideais: Módulos 18% · Inversores 22% · BESS 30% · Carregadores EV 32%.",
     "Sem dados de preço no documento, a nota deve ser conservadora (máximo 5).",
 ])
-
-story += rubric_dimension("5.6 Certificações e Compliance", "10%", [
-    ["9–10", "Todas as certificações obrigatórias visíveis com nº de certificado + INMETRO válido"],
-    ["7–8", "Todas obrigatórias mencionadas + INMETRO em processo com prazo documentado"],
-    ["5–6", "IEC internacionais presentes sem INMETRO; ou INMETRO declarado sem prazo"],
-    ["3–4", "Certificações parciais; INMETRO ausente sem qualquer plano mencionado"],
-    ["0–2", "Ausência de certificações IEC básicas para produto que se conecta à rede elétrica"],
-], extra_notes=[
-    "Obrigatórias por categoria hoje no prompt — Módulos FV: IEC 61215 + IEC 61730 + INMETRO (portaria 004). "
-    "Inversores on-grid: IEC 62116 + IEC 61683 + INMETRO (portaria 357). BESS: IEC 62619 + UN 38.3 + INMETRO. "
-    "Carregadores EV AC: IEC 61851-1 + INMETRO (portaria 563).",
-])
+story += rubric_dimension("Fit com Portfólio Fotus", "25% da categoria", [
+    ["9–10", "Preenche gap estratégico claro; não canibaliza nenhum fornecedor atual forte"],
+    ["7–8", "Complementa o portfólio com diferencial claro; sobreposição gerenciável"],
+    ["5–6", "Sobreposição significativa com portfólio atual; justificável como alternativa de negociação"],
+    ["3–4", "Alta canibalização de fornecedor atual sem vantagem técnica/comercial clara"],
+    ["0–2", "Duplicação pura; produto fora do escopo da Fotus"],
+], extra_notes=["Gaps prioritários hoje no prompt: BESS residencial/C&amp;I, carregadores EV com INMETRO, inversores com pós-venda melhor que o atual, módulos TOPCon Tier-1 com margem melhor."])
+story += rubric_dimension("Canal de Vendas", "15% da categoria", [
+    ["9–10", "Modelo de canal claro e documentado, sem venda direta que compita com distribuidores"],
+    ["5–6", "Modelo de canal ambíguo ou parcialmente documentado"],
+    ["0–2", "Evidência de venda direta ao integrador/consumidor final que compete com o canal de distribuição"],
+], extra_notes=["Avalia a estrutura de distribuição do fabricante e o risco de conflito de canal para a Fotus."])
+story += rubric_dimension("Barreira de Entrada", "15% da categoria", [
+    ["9–10", "Barreira clara e documentada (exclusividade territorial, processo de homologação longo já vencido, etc.)"],
+    ["5–6", "Alguma barreira, mas replicável com esforço moderado"],
+    ["0–2", "Nenhuma barreira — qualquer concorrente pode obter as mesmas condições"],
+], extra_notes=["Avalia a dificuldade de outro distribuidor replicar esta posição."])
+story += rubric_dimension("MOQ", "15% da categoria", [
+    ["9–10", "MOQ baixo e claramente documentado, compatível com capital de giro sem risco"],
+    ["5–6", "MOQ documentado mas exige capital de giro significativo"],
+    ["0–2", "MOQ alto sem flexibilidade, ou não informado"],
+], extra_notes=["Ausência de dado de MOQ é tratada como risco, não como neutro."])
 
 story.append(PageBreak())
-story.append(h2("5.7 Fórmula do score final"))
+story.append(h2("5.4 Fórmula do score final"))
 story.append(code(
-    "score_base = (qualidade × 0.25) + (solidez × 0.20) + (pos_venda × 0.20)\n"
-    "           + (fit × 0.15) + (margem × 0.10) + (certificacoes × 0.10)\n\n"
+    "score_categoria(fabricante) = pos_venda×0.30 + solidez×0.25 + reputacao×0.15\n"
+    "                             + marketshare_nacional×0.15 + marketshare_mundial×0.15\n\n"
+    "score_categoria(produto) = certif_nacionais×0.20 + qualidade_tecnica×0.20 + tecnologia×0.15\n"
+    "                          + certif_internacionais×0.15 + garantia×0.15 + rma×0.15\n\n"
+    "score_categoria(mercado) = margem×0.30 + fit_portfolio×0.25 + canal_vendas×0.15\n"
+    "                          + barreira_entrada×0.15 + moq×0.15\n\n"
+    "score_base = (score_categoria(fabricante) + score_categoria(produto) + score_categoria(mercado)) / 3\n"
     "penalidade_pos_venda = -1.0  SE pos_venda_brasil <= 5.0,  SENAO 0.0\n\n"
     "score_final = score_base + penalidade_pos_venda"
 ))
 story.append(p(
-    "Importante: o backend <b>não confia apenas no score que a própria IA devolveu</b> no JSON — ele recalcula "
-    "o score final e a penalidade de pós-venda a partir das 6 notas por dimensão, como camada de segurança "
-    "contra erro aritmético do modelo."
+    "Importante: o backend <b>não confia apenas no score que a própria IA devolveu</b> no JSON — ele "
+    "recalcula as 3 categorias e o score final a partir das 16 notas por dimensão, como camada de "
+    "segurança contra erro aritmético do modelo. Nos testes de validação desta versão, os valores "
+    "recalculados pelo backend divergiram (levemente) dos que a própria IA reportou ter calculado — "
+    "confirmando que essa camada de segurança é necessária, não apenas teórica."
 ))
 
-story.append(h2("5.8 Faixas de decisão"))
+story.append(h2("5.5 Faixas de decisão"))
+story.append(p("As faixas de decisão sobre o score final (0–10) não mudaram nesta versão:"))
 story.append(simple_table(
     ["Faixa de score", "Decisão", "Significado apresentado ao usuário"],
     [
@@ -395,12 +464,12 @@ story.append(simple_table(
     col_widths=[28 * mm, 32 * mm, 100 * mm],
 ))
 
-story.append(h2("5.9 Vetos automáticos (força NO-GO independentemente do score)"))
+story.append(h2("5.6 Vetos automáticos (força NO-GO independentemente do score)"))
 story.append(bullets([
     "Pós-venda Brasil ≤ 3,0 sem plano concreto documentado de estruturação no Brasil",
     "Evidência de fraude, contrafação ou irregularidade fiscal",
     "Fabricante em falência ou liquidação",
-    "Ausência total de certificação IEC para produto que se conecta à rede elétrica",
+    "Ausência total de certificação internacional para produto que se conecta à rede elétrica",
     "Solidez do fabricante ≤ 2,0",
 ]))
 story.append(warn_box(
@@ -411,10 +480,11 @@ story.append(warn_box(
     "do score final recalculado. Ou seja: se a IA \"esquecer\" de aplicar um veto (por exemplo, não perceber uma "
     "menção a falência no meio de um documento longo), nada no código impede que o sistema salve uma decisão "
     "diferente de NO-GO mesmo com uma condição de veto presente. Recomenda-se avaliar se esses vetos devem "
-    "virar checagens explícitas no backend (ou pelo menos um campo de alerta separado revisado manualmente)."
+    "virar checagens explícitas no backend (ou pelo menos um campo de alerta separado revisado manualmente). "
+    "Esta limitação já existia na versão anterior da metodologia e permanece sem alteração nesta atualização."
 ))
 
-story.append(h2("5.10 Perguntas que todo relatório deve responder"))
+story.append(h2("5.7 Perguntas que todo relatório deve responder"))
 story.append(p("O prompt exige que o resumo e o texto de recomendação sempre antecipem estas 4 perguntas:"))
 story.append(bullets([
     "\"Se esse produto der problema em campo, quem paga o custo de pós-venda?\"",
@@ -467,7 +537,7 @@ story.append(code(
     "score_ai        = score calculado só com a análise principal (IA), sem ajuste de times\n"
     "score_team_adj  = soma dos ajustes dos times que já enviaram relatório\n"
     "score_final     = min(10, max(0, score_ai + score_team_adj))\n\n"
-    "Decisão final recalculada nas mesmas faixas da seção 5.8, usando o score_final ajustado."
+    "Decisão final recalculada nas mesmas faixas da seção 5.5, usando o score_final ajustado."
 ))
 story.append(p(
     "O ajuste é recalculado automaticamente sempre que um time envia ou exclui seu relatório — não é "
@@ -539,8 +609,18 @@ story.append(simple_table(
         ["score_ai", "Score calculado só pela análise principal da IA, sem ajuste de times"],
         ["score_team_adj", "Soma dos ajustes aplicados pelos times internos (-1,5 a +1,5)"],
         ["score_final", "score_ai + score_team_adj, limitado entre 0 e 10 — é o que aparece no dashboard"],
+        ["score_fabricante / score_produto / score_mercado", "Score de cada categoria (0-10), recalculado pelo backend a partir das 16 sub-notas — colunas adicionadas na versão atual da metodologia"],
     ],
-    col_widths=[38 * mm, 122 * mm],
+    col_widths=[62 * mm, 98 * mm],
+))
+story.append(warn_box(
+    "Coexistência de duas versões da metodologia nos dados",
+    "Fabricantes analisados antes desta atualização têm <font face='Courier'>score_fabricante/produto/mercado</font> "
+    "zerados (nunca foram calculados) — a aplicação usa a presença dessas notas dentro de "
+    "<font face='Courier'>raw_analysis</font> para decidir, registro por registro, se deve exibir o layout "
+    "antigo (6 dimensões) ou o novo (3 categorias). Isso vale para o ranking, o painel de detalhe, a "
+    "comparação entre fabricantes e o relatório em PDF. Ao comparar um fabricante antigo com um novo, a "
+    "interface exibe um aviso explicando a diferença de metodologia entre os dois.",
 ))
 story.append(p(
     "Ponto relevante: quando novos arquivos são adicionados a um fabricante já existente (\"Adicionar "
@@ -558,8 +638,8 @@ story += h1("9. Funcionalidades do Dashboard")
 story.append(bullets([
     "<b>Ranking geral</b> de fabricantes, ordenado por score final, com filtros por tipo de produto e por decisão, e busca por nome/país.",
     "<b>Indicadores agregados</b>: total de fabricantes analisados, score médio, melhor avaliado, proporção aprovada (GO + GO CONDICIONAL) sobre o total.",
-    "<b>Painel de detalhe</b> por fabricante: perfil resumido (\"Sobre a Marca\"), resumo executivo, scorecard com gráfico radar, produtos avaliados, red flags, pontos positivos, dados financeiros estimados, informações pendentes, arquivos anexados para download, e as análises dos times internos.",
-    "<b>Comparação lado a lado</b> entre dois fabricantes (radar comparativo e diferença por dimensão).",
+    "<b>Painel de detalhe</b> por fabricante: perfil resumido (\"Sobre a Marca\"), resumo executivo, scorecard (gráfico de barras por categoria + tabela com as 16 sub-notas, ou radar de 6 eixos para fabricantes antigos), produtos avaliados, red flags, pontos positivos, dados financeiros estimados, informações pendentes, arquivos anexados para download, e as análises dos times internos.",
+    "<b>Comparação lado a lado</b> entre dois fabricantes (radar comparativo e diferença por dimensão/categoria).",
     "<b>Exportação de relatório em PDF</b> por fabricante, com o mesmo conteúdo estruturado do painel de detalhe, pronto para impressão/compartilhamento.",
 ]))
 
@@ -572,14 +652,15 @@ story.append(p(
     "metodologia atual — como pontos de partida para a revisão crítica do responsável por P&amp;D:"
 ))
 story.append(numbered([
-    "<b>Vetos automáticos não são reforçados em código</b> (seção 5.9) — dependem inteiramente de a IA aplicar corretamente a regra textual do prompt. Vale avaliar se esses vetos devem virar checagens programáticas.",
+    "<b>Vetos automáticos não são reforçados em código</b> (seção 5.6) — dependem inteiramente de a IA aplicar corretamente a regra textual do prompt. Vale avaliar se esses vetos devem virar checagens programáticas.",
     "<b>Análise 100% cega a fontes externas</b> — não há verificação de CNPJ, situação do registro INMETRO, notícias de fraude ou falência. É uma limitação de escopo deliberada, mas aumenta o risco de um documento bem produzido (porém enganoso) obter score alto.",
-    "<b>\"Potencial de Margem\" e \"Fit Portfólio\" tendem a ficar sistematicamente baixos ou pouco discriminantes</b>, porque dependem de dados (preço, MOQ) raramente presentes nos documentos comerciais dos fabricantes.",
+    "<b>\"Potencial de Margem\" e \"Fit Portfólio\" (categoria Mercado) tendem a ficar sistematicamente baixos ou pouco discriminantes</b>, porque dependem de dados (preço, MOQ) raramente presentes nos documentos comerciais dos fabricantes. O mesmo vale para \"Marketshare Nacional/Mundial\" e \"Reputação\" (categoria Fabricante), que também raramente têm dado numérico verificável no documento.",
     "<b>O ajuste dos times internos depende de correspondência de palavras-chave</b> no texto livre gerado pela IA (ex.: procurar \"aprovado\"/\"reprovado\" na resposta) — sensível a variações de fraseado que o prompt não previu.",
     "<b>Reprocessamento não incremental</b> — adicionar novos arquivos a um fabricante existente refaz a análise de todos os documentos anteriores também, o que cresce o custo e o tempo de processamento com o total acumulado de documentos, não apenas com os novos.",
     "<b>Fabricantes com catálogos muito grandes</b> dependem de múltiplas chamadas de IA encadeadas (seção 7.3) — mais lotes significam mais custo de tokens e mais chances de pequenas inconsistências entre o que foi \"lembrado\" de um lote para o outro.",
     "<b>Sem controle de acesso</b> — qualquer pessoa com acesso à aplicação pode excluir uma análise de forma permanente e imediata.",
-    "<b>Parâmetros fixos no código-fonte</b> — pesos das dimensões, faixas de decisão, modelo de IA usado e limites de tokens estão hoje embutidos diretamente no código; não existe um arquivo de configuração externo para ajustá-los sem alterar o app.py.",
+    "<b>Parâmetros fixos no código-fonte</b> — pesos das categorias/dimensões, faixas de decisão, modelo de IA usado e limites de tokens estão hoje embutidos diretamente no código; não existe um arquivo de configuração externo para ajustá-los sem alterar o app.py.",
+    "<b>Período de transição entre metodologias</b> — enquanto houver fabricantes analisados sob a versão antiga (6 dimensões) e a nova (3 categorias) coexistindo na base, comparações diretas entre eles ficam limitadas (a aplicação avisa quando isso ocorre, mas não converte uma nota para a escala da outra). Recomenda-se decidir se/quando vale reprocessar os fabricantes antigos para trazê-los à metodologia atual.",
 ]))
 story.append(Spacer(1, 8))
 story.append(p(

@@ -532,19 +532,27 @@ function renderRanking(list) {
   el.innerHTML = `<div class="ranking-grid">${list.map((m, i) => renderMfrCard(m, i)).join('')}</div>`;
 }
 
+function hasNewScoreSchema(m) {
+  const ra = m.raw_analysis || {};
+  return !!(ra.scores && ra.scores.fabricante);
+}
+
 function renderMfrCard(m, idx) {
   const dec = getDecisionInfo(m.decision);
   const scoreClass = getScoreClass(m.score_final);
   const rank = getRankLabel(idx);
   const types = (m.product_types||[]).map(t => `<span class="badge-type ${getTypeClass(t)}">${t}</span>`).join('');
-  const bars = [
-    ['Qualidade', m.score_qualidade],
-    ['Solidez', m.score_solidez],
-    ['Pós-Venda', m.score_pos_venda],
-    ['Fit', m.score_fit],
-    ['Margem', m.score_margem],
-    ['Certif.', m.score_certificacoes],
-  ].map(([label, val]) => `
+  const barDims = hasNewScoreSchema(m)
+    ? [['Fabricante', m.score_fabricante], ['Produto', m.score_produto], ['Mercado', m.score_mercado]]
+    : [
+        ['Qualidade', m.score_qualidade],
+        ['Solidez', m.score_solidez],
+        ['Pós-Venda', m.score_pos_venda],
+        ['Fit', m.score_fit],
+        ['Margem', m.score_margem],
+        ['Certif.', m.score_certificacoes],
+      ];
+  const bars = barDims.map(([label, val]) => `
     <div class="score-bar-row">
       <span class="score-bar-label">${label}</span>
       <div class="score-bar-track"><div class="score-bar-fill" style="width:${(val/10)*100}%"></div></div>
@@ -593,24 +601,64 @@ function renderDetail(m) {
   const ra = m.raw_analysis || {};
 
   const typeBadges = (m.product_types||[]).map(t => `<span class="badge-type ${getTypeClass(t)} me-1">${t}</span>`).join('');
+  const newSchema = hasNewScoreSchema(m);
 
-  // Scores table rows
-  const dims = [
-    ['Qualidade / Tecnologia', m.score_qualidade, '25%'],
-    ['Solidez do Fabricante', m.score_solidez, '20%'],
-    ['Pós-venda Brasil', m.score_pos_venda, '20%'],
-    ['Fit Portfólio Fotus', m.score_fit, '15%'],
-    ['Potencial de Margem', m.score_margem, '10%'],
-    ['Certificações', m.score_certificacoes, '10%'],
-  ];
-  const scoreRows = dims.map(([label, val, peso]) => {
-    const weighted = ((val||0) * parseFloat(peso) / 100).toFixed(2);
-    return `<tr>
-      <td>${label}</td><td>${peso}</td>
-      <td><strong>${(val||0).toFixed(1)}</strong></td>
-      <td>${weighted}</td>
-    </tr>`;
-  }).join('');
+  // Scorecard — layout novo (3 categorias) vs. legado (6 dimensões)
+  const CATEGORY_LABELS = {
+    fabricante: { title: 'Fabricante', icon: 'fa-industry', sub: {
+      pos_venda_brasil: ['Pós-venda Brasil', '30%'], solidez_fabricante: ['Solidez do Fabricante', '25%'],
+      reputacao: ['Reputação', '15%'], marketshare_nacional: ['Marketshare Nacional', '15%'],
+      marketshare_mundial: ['Marketshare Mundial', '15%'],
+    }},
+    produto: { title: 'Produto', icon: 'fa-microchip', sub: {
+      certificacoes_nacionais: ['Certificações Nacionais', '20%'], qualidade_tecnica: ['Qualidade Técnica', '20%'],
+      tecnologia: ['Tecnologia', '15%'], certificacoes_internacionais: ['Certificações Internacionais', '15%'],
+      garantia: ['Garantia', '15%'], rma: ['RMA', '15%'],
+    }},
+    mercado: { title: 'Mercado', icon: 'fa-chart-line', sub: {
+      potencial_margem: ['Potencial de Margem', '30%'], fit_portfolio: ['Fit Portfólio Fotus', '25%'],
+      canal_vendas: ['Canal de Vendas', '15%'], barreira_entrada: ['Barreira de Entrada', '15%'], moq: ['MOQ', '15%'],
+    }},
+  };
+
+  let scoreRows = '';
+  if (newSchema) {
+    const scoresObj = ra.scores || {};
+    scoreRows = ['fabricante', 'produto', 'mercado'].map(cat => {
+      const cfg = CATEGORY_LABELS[cat];
+      const subScores = scoresObj[cat] || {};
+      const catScore = cat === 'fabricante' ? m.score_fabricante : cat === 'produto' ? m.score_produto : m.score_mercado;
+      const subRows = Object.entries(cfg.sub).map(([key, [label, peso]]) => {
+        const val = subScores[key];
+        const weighted = ((val||0) * parseFloat(peso) / 100).toFixed(2);
+        return `<tr>
+          <td style="padding-left:22px;color:var(--muted)">${label}</td><td>${peso}</td>
+          <td>${(val||0).toFixed(1)}</td><td>${weighted}</td>
+        </tr>`;
+      }).join('');
+      return `<tr style="background:var(--card2)">
+          <td colspan="2"><strong><i class="fa ${cfg.icon} me-1"></i>${cfg.title}</strong></td>
+          <td colspan="2"><strong>${(catScore||0).toFixed(1)}</strong></td>
+        </tr>${subRows}`;
+    }).join('');
+  } else {
+    const dims = [
+      ['Qualidade / Tecnologia', m.score_qualidade, '25%'],
+      ['Solidez do Fabricante', m.score_solidez, '20%'],
+      ['Pós-venda Brasil', m.score_pos_venda, '20%'],
+      ['Fit Portfólio Fotus', m.score_fit, '15%'],
+      ['Potencial de Margem', m.score_margem, '10%'],
+      ['Certificações', m.score_certificacoes, '10%'],
+    ];
+    scoreRows = dims.map(([label, val, peso]) => {
+      const weighted = ((val||0) * parseFloat(peso) / 100).toFixed(2);
+      return `<tr>
+        <td>${label}</td><td>${peso}</td>
+        <td><strong>${(val||0).toFixed(1)}</strong></td>
+        <td>${weighted}</td>
+      </tr>`;
+    }).join('');
+  }
 
   // Red flags
   const flags = (m.red_flags||[]).map(f => {
@@ -770,31 +818,57 @@ function renderDetail(m) {
     </div>
   `;
 
-  // Render radar chart
+  // Render gráfico do scorecard — barras por categoria (novo) ou radar de 6 eixos (legado)
   setTimeout(() => {
     const ctx = document.getElementById('detail-radar');
     if (!ctx) return;
     if (detailRadarChart) detailRadarChart.destroy();
-    detailRadarChart = new Chart(ctx, {
-      type: 'radar',
-      data: {
-        labels: ['Qualidade', 'Solidez', 'Pós-Venda BR', 'Fit Portfolio', 'Margem', 'Certificações'],
-        datasets: [{
-          label: m.name,
-          data: [m.score_qualidade, m.score_solidez, m.score_pos_venda, m.score_fit, m.score_margem, m.score_certificacoes],
-          borderColor: '#f97316',
-          backgroundColor: 'rgba(249,115,22,.15)',
-          pointBackgroundColor: '#f97316',
-          borderWidth: 2,
-          pointRadius: 4,
-        }]
-      },
-      options: {
-        scales: { r: { min: 0, max: 10, ticks: { stepSize: 2, color: '#6a90b8', font: { size: 10 } }, grid: { color: '#1a3558' }, pointLabels: { color: '#d8eaff', font: { size: 11 } }, angleLines: { color: '#1a3558' } } },
-        plugins: { legend: { display: false } },
-        responsive: true,
-      }
-    });
+    if (newSchema) {
+      detailRadarChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Fabricante', 'Produto', 'Mercado'],
+          datasets: [{
+            label: m.name,
+            data: [m.score_fabricante, m.score_produto, m.score_mercado],
+            backgroundColor: 'rgba(249,115,22,.6)',
+            borderColor: '#f97316',
+            borderWidth: 1.5,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          scales: {
+            x: { min: 0, max: 10, ticks: { color: '#6a90b8', font: { size: 10 } }, grid: { color: '#1a3558' } },
+            y: { ticks: { color: '#d8eaff', font: { size: 12 } }, grid: { display: false } },
+          },
+          plugins: { legend: { display: false } },
+          responsive: true,
+        }
+      });
+    } else {
+      detailRadarChart = new Chart(ctx, {
+        type: 'radar',
+        data: {
+          labels: ['Qualidade', 'Solidez', 'Pós-Venda BR', 'Fit Portfolio', 'Margem', 'Certificações'],
+          datasets: [{
+            label: m.name,
+            data: [m.score_qualidade, m.score_solidez, m.score_pos_venda, m.score_fit, m.score_margem, m.score_certificacoes],
+            borderColor: '#f97316',
+            backgroundColor: 'rgba(249,115,22,.15)',
+            pointBackgroundColor: '#f97316',
+            borderWidth: 2,
+            pointRadius: 4,
+          }]
+        },
+        options: {
+          scales: { r: { min: 0, max: 10, ticks: { stepSize: 2, color: '#6a90b8', font: { size: 10 } }, grid: { color: '#1a3558' }, pointLabels: { color: '#d8eaff', font: { size: 11 } }, angleLines: { color: '#1a3558' } } },
+          plugins: { legend: { display: false } },
+          responsive: true,
+        }
+      });
+    }
   }, 50);
 
   // Load team reports asynchronously
@@ -825,17 +899,31 @@ function resetView() {
 }
 
 function renderComparison(m1, m2) {
-  const dims = [
-    { key: 'score_qualidade', label: 'Qualidade / Tecnologia', peso: '25%' },
-    { key: 'score_solidez', label: 'Solidez do Fabricante', peso: '20%' },
-    { key: 'score_pos_venda', label: 'Pós-venda Brasil', peso: '20%' },
-    { key: 'score_fit', label: 'Fit Portfólio', peso: '15%' },
-    { key: 'score_margem', label: 'Potencial de Margem', peso: '10%' },
-    { key: 'score_certificacoes', label: 'Certificações', peso: '10%' },
-  ];
+  const bothNew = hasNewScoreSchema(m1) && hasNewScoreSchema(m2);
+  const bothOld = !hasNewScoreSchema(m1) && !hasNewScoreSchema(m2);
+  const dims = bothNew
+    ? [
+        { key: 'score_fabricante', label: 'Fabricante', peso: '33%' },
+        { key: 'score_produto', label: 'Produto', peso: '33%' },
+        { key: 'score_mercado', label: 'Mercado', peso: '34%' },
+      ]
+    : [
+        { key: 'score_qualidade', label: 'Qualidade / Tecnologia', peso: '25%' },
+        { key: 'score_solidez', label: 'Solidez do Fabricante', peso: '20%' },
+        { key: 'score_pos_venda', label: 'Pós-venda Brasil', peso: '20%' },
+        { key: 'score_fit', label: 'Fit Portfólio', peso: '15%' },
+        { key: 'score_margem', label: 'Potencial de Margem', peso: '10%' },
+        { key: 'score_certificacoes', label: 'Certificações', peso: '10%' },
+      ];
 
   const dec1 = getDecisionInfo(m1.decision);
   const dec2 = getDecisionInfo(m2.decision);
+
+  const mixedSchemaNotice = (!bothNew && !bothOld) ? `<p style="color:var(--muted);font-size:12px;margin-bottom:10px">
+    <i class="fa fa-triangle-exclamation me-1"></i>Estes fabricantes foram analisados com metodologias de pontuação diferentes
+    (um no modelo antigo de 6 dimensões, outro no modelo novo de 3 categorias) — a comparação abaixo usa o modelo do
+    fabricante mais recente como referência, mas os valores individuais podem não ser diretamente equivalentes.
+  </p>` : '';
 
   const scoreRows = dims.map(d => {
     const v1 = m1[d.key]||0, v2 = m2[d.key]||0;
@@ -898,6 +986,7 @@ function renderComparison(m1, m2) {
 
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px">
       <div class="section-header">Comparação de Scores por Dimensão</div>
+      ${mixedSchemaNotice}
       <table class="compare-scores-table">
         <thead><tr><th>Dimensão</th><th>${m1.name}</th><th>${m2.name}</th><th>Diferença</th></tr></thead>
         <tbody>
@@ -925,20 +1014,29 @@ function renderComparison(m1, m2) {
     const ctx = document.getElementById('compare-chart');
     if (!ctx) return;
     if (comparisonChart) comparisonChart.destroy();
+    const compareLabels = bothNew
+      ? ['Fabricante', 'Produto', 'Mercado']
+      : ['Qualidade', 'Solidez', 'Pós-Venda BR', 'Fit Portfolio', 'Margem', 'Certificações'];
+    const compareData1 = bothNew
+      ? [m1.score_fabricante, m1.score_produto, m1.score_mercado]
+      : [m1.score_qualidade, m1.score_solidez, m1.score_pos_venda, m1.score_fit, m1.score_margem, m1.score_certificacoes];
+    const compareData2 = bothNew
+      ? [m2.score_fabricante, m2.score_produto, m2.score_mercado]
+      : [m2.score_qualidade, m2.score_solidez, m2.score_pos_venda, m2.score_fit, m2.score_margem, m2.score_certificacoes];
     comparisonChart = new Chart(ctx, {
       type: 'radar',
       data: {
-        labels: ['Qualidade', 'Solidez', 'Pós-Venda BR', 'Fit Portfolio', 'Margem', 'Certificações'],
+        labels: compareLabels,
         datasets: [
           {
             label: m1.name,
-            data: [m1.score_qualidade, m1.score_solidez, m1.score_pos_venda, m1.score_fit, m1.score_margem, m1.score_certificacoes],
+            data: compareData1,
             borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,.12)',
             pointBackgroundColor: '#f97316', borderWidth: 2, pointRadius: 4,
           },
           {
             label: m2.name,
-            data: [m2.score_qualidade, m2.score_solidez, m2.score_pos_venda, m2.score_fit, m2.score_margem, m2.score_certificacoes],
+            data: compareData2,
             borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.12)',
             pointBackgroundColor: '#3b82f6', borderWidth: 2, pointRadius: 4,
           }

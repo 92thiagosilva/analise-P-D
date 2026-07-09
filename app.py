@@ -74,6 +74,12 @@ def init_db():
         conn.execute("UPDATE manufacturers SET score_ai = score_final WHERE score_ai = 0")
     if "score_team_adj" not in existing:
         conn.execute("ALTER TABLE manufacturers ADD COLUMN score_team_adj REAL DEFAULT 0")
+    # Migração: modelo de pontuação em 3 categorias (Fabricante/Produto/Mercado).
+    # Fabricantes analisados ANTES desta migração continuam com essas colunas em 0 —
+    # a interface detecta isso via raw_analysis e usa o layout antigo (6 dimensões) para eles.
+    for col in ("score_fabricante", "score_produto", "score_mercado"):
+        if col not in existing:
+            conn.execute(f"ALTER TABLE manufacturers ADD COLUMN {col} REAL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -129,14 +135,33 @@ ANALYSIS_PROMPT = """Analise o(s) documento(s) do fabricante solar com máximo r
     }
   ],
   "scores": {
-    "qualidade_tecnologia": 6.0,
-    "solidez_fabricante": 5.0,
-    "pos_venda_brasil": 3.0,
-    "fit_portfolio": 6.0,
-    "potencial_margem": 5.0,
-    "certificacoes": 5.0,
-    "score_final": 4.95,
-    "penalidade_pos_venda": 0.0
+    "fabricante": {
+      "reputacao": 5.0,
+      "solidez_fabricante": 5.0,
+      "pos_venda_brasil": 3.0,
+      "marketshare_nacional": 4.0,
+      "marketshare_mundial": 5.0,
+      "score_categoria": 4.35
+    },
+    "produto": {
+      "qualidade_tecnica": 6.0,
+      "tecnologia": 6.0,
+      "certificacoes_nacionais": 5.0,
+      "certificacoes_internacionais": 6.0,
+      "garantia": 5.0,
+      "rma": 4.0,
+      "score_categoria": 5.4
+    },
+    "mercado": {
+      "potencial_margem": 5.0,
+      "fit_portfolio": 6.0,
+      "canal_vendas": 5.0,
+      "barreira_entrada": 5.0,
+      "moq": 5.0,
+      "score_categoria": 5.25
+    },
+    "score_final": 4.03,
+    "penalidade_pos_venda": -1.0
   },
   "decision": "AGUARDAR",
   "decision_label": "🔄 AGUARDAR",
@@ -196,83 +221,143 @@ INSTRUÇÕES CRÍTICAS PARA PRODUTOS:
 6. Nunca agrupe produtos diferentes em uma única categoria por conveniência.
 
 ═══════════════════════════════════════════════════════════
-CRITÉRIOS DE PONTUAÇÃO — RÉGUA RIGOROSA (0-10 por dimensão)
+CRITÉRIOS DE PONTUAÇÃO — 3 CATEGORIAS, 16 DIMENSÕES (0-10 cada)
 ═══════════════════════════════════════════════════════════
 
 PRINCÍPIO GERAL: na ausência de evidência, pontue para baixo.
 Um fabricante desconhecido sem dados verificáveis no documento NÃO pode receber score alto.
 
-──────────────────────────────────────────────────────────
-QUALIDADE/TECNOLOGIA (peso 25%)
-──────────────────────────────────────────────────────────
-9-10: PVEL Top Performers mencionado com evidência; eficiência celular ≥23%(TOPCon) ou ≥24%(HJT); degradação ≤0.4%/ano; histórico de confiabilidade comprovado
-7-8: Certificações IEC completas VISÍVEIS no documento; eficiência compatível com mercado 2025-2026; garantia ≥25 anos com termos claros
-5-6: Certificações básicas presentes; eficiência dentro do aceitável; garantia 10-25 anos; poucos dados de confiabilidade
-3-4: Certificações não visíveis ou apenas mencionadas sem número do certificado; eficiência abaixo da média; garantia ≤10 anos ou com restrições
-0-2: Nenhuma certificação comprovada no documento; dados técnicos implausíveis ou contraditórios; qualquer menção a falhas em campo
-ATENÇÃO: eficiência declarada acima de 24% para módulos sem prova de tecnologia HJT é red flag de exagero.
+A pontuação final combina 3 categorias com peso IGUAL (1/3 cada). Dentro de cada categoria, as
+dimensões têm pesos diferentes entre si (indicados abaixo). Calcule cada "score_categoria" como a
+média ponderada das suas dimensões, depois combine as 3 categorias.
 
-──────────────────────────────────────────────────────────
-SOLIDEZ DO FABRICANTE (peso 20%)
-──────────────────────────────────────────────────────────
+═══════════════════════════════════════════════════════════
+CATEGORIA 1 — FABRICANTE (peso 1/3 do score final)
+═══════════════════════════════════════════════════════════
+Reputação, solidez financeira, pós-venda e presença de mercado da EMPRESA (não do produto).
+
+── pos_venda_brasil (peso 30% da categoria) — DIMENSÃO CRÍTICA ──
+9-10: Escritório próprio no Brasil com endereço; equipe técnica local certificada; RMA institucional ≤15 dias documentado; estoque de peças no Brasil
+7-8: Representante técnico DEDICADO no Brasil com nome/contato; processo documentado 15-30 dias
+5-6: Representante comercial (não técnico) no Brasil; suporte via importação 30-60 dias; suporte remoto apenas
+3-4: Sem representação local documentada; suporte apenas em inglês/chinês; processo vago
+0-2: Nenhuma menção a suporte no Brasil; garantia de execução duvidosa
+REGRA DE PENALIDADE OBRIGATÓRIA: se pos_venda_brasil ≤ 5.0, subtrair 1.0 ponto do score_final (fora do cálculo por categoria). Registre em "penalidade_pos_venda": -1.0.
+ATENÇÃO: se o documento não menciona nada sobre Brasil, esta dimensão é automaticamente ≤3.
+
+── solidez_fabricante (peso 25% da categoria) ──
 9-10: Top-10 global comprovado (JinkoSolar/LONGi/Trina/Canadian/JA Solar/Risen/BYD); receita >USD 3B documentada; capacidade >30GW/ano; >10 anos no mercado
-7-8: Fabricante estabelecido; receita USD 500M-3B documentada; capacidade 5-30GW/ano; 5-10 anos no mercado com histórico verificável no documento
+7-8: Fabricante estabelecido; receita USD 500M-3B documentada; capacidade 5-30GW/ano; 5-10 anos verificável
 5-6: Porte médio com alguns dados financeiros; capacidade 1-5GW/ano; 3-5 anos; dados parcialmente verificáveis
-3-4: Fabricante pequeno; <3 anos no mercado ou mudança recente de controle; pouca informação pública no documento
-0-2: Sem dados financeiros ou de capacidade; endereço ou histórico não verificável; suspeita de rebranding
-ATENÇÃO: se o documento não menciona faturamento, capacidade ou anos no mercado, presuma porte pequeno (score ≤5).
+3-4: Fabricante pequeno; <3 anos ou mudança recente de controle; pouca informação pública
+0-2: Sem dados financeiros/capacidade; endereço ou histórico não verificável; suspeita de rebranding
+ATENÇÃO: se o documento não menciona faturamento, capacidade ou anos de mercado, presuma porte pequeno (≤5).
 
-──────────────────────────────────────────────────────────
-PÓS-VENDA BRASIL (peso 20%) — DIMENSÃO CRÍTICA
-──────────────────────────────────────────────────────────
-9-10: Escritório próprio no Brasil com endereço; equipe técnica local certificada; RMA ≤15 dias documentado; estoque de peças no Brasil
-7-8: Representante técnico DEDICADO no Brasil com nome/contato; processo RMA documentado 15-30 dias
-5-6: Representante comercial (não técnico) no Brasil; RMA via importação 30-60 dias; suporte remoto apenas
-3-4: Sem representação local documentada no Brasil; suporte apenas em inglês/chinês; processo RMA vago
-0-2: Nenhuma menção a suporte no Brasil; garantia de execução duvidosa; zero canal de comunicação local definido
-REGRA DE PENALIDADE OBRIGATÓRIA: se pos_venda_brasil ≤ 5.0, subtrair 1.0 ponto do score_final. Registre como "penalidade_pos_venda": -1.0 no JSON.
-ATENÇÃO: se o documento não menciona nada sobre Brasil, o score desta dimensão é automaticamente ≤3.
+── reputacao (peso 15% da categoria) ──
+Avalie o quanto as afirmações de mercado/imagem do fabricante são sustentadas por evidência concreta no documento (prêmios com fonte, rankings verificáveis, clientes/projetos nomeados) vs. apenas marketing genérico.
+9-10: Reputação sustentada por dados de terceiros verificáveis no documento (ranking setorial com fonte, certificação de qualidade de terceiros, cases nomeados)
+5-6: Menções razoáveis, parcialmente verificáveis, sem exageros evidentes
+0-2: Só "somos líderes/referência" sem qualquer dado de suporte — marketing puro
 
-──────────────────────────────────────────────────────────
-FIT COM PORTFÓLIO FOTUS (peso 15%)
-──────────────────────────────────────────────────────────
+── marketshare_nacional (peso 15% da categoria) ──
+9-10: Posição de mercado no Brasil comprovada por dado numérico ou fonte externa citada no documento
+5-6: Presença mencionada mas sem número que comprove posição relativa
+0-2: Nenhuma informação de posição de mercado no Brasil
+
+── marketshare_mundial (peso 15% da categoria) ──
+9-10: Posição global comprovada por dado numérico (GW instalados, ranking setorial, market share %) com fonte
+5-6: Presença global mencionada sem número que comprove a posição
+0-2: Nenhuma informação de posição de mercado global
+
+═══════════════════════════════════════════════════════════
+CATEGORIA 2 — PRODUTO (peso 1/3 do score final)
+═══════════════════════════════════════════════════════════
+Qualidade técnica, tecnologia, garantia, RMA e certificações da LINHA DE PRODUTO.
+
+── certificacoes_nacionais (peso 20% da categoria) — INMETRO ──
+9-10: INMETRO válido com número de registro visível para TODOS os modelos relevantes
+7-8: INMETRO mencionado com prazo documentado para a maioria dos modelos
+5-6: INMETRO declarado sem número/prazo, ou válido só para parte da linha
+3-4: INMETRO ausente sem qualquer plano mencionado
+0-2: Ausência total de INMETRO para produto que se conecta à rede elétrica
+
+── qualidade_tecnica (peso 20% da categoria) ──
+9-10: Eficiência/performance no topo do mercado 2025-2026 com dados plausíveis; histórico de confiabilidade comprovado (PVEL, testes de terceiros)
+7-8: Especificações compatíveis com o mercado atual, certificações IEC completas visíveis
+5-6: Especificações aceitáveis, poucos dados de confiabilidade
+3-4: Dados técnicos incompletos ou abaixo da média
+0-2: Dados implausíveis/contraditórios, ou qualquer menção a falhas em campo
+ATENÇÃO: eficiência declarada acima do limite físico plausível para a tecnologia (ex.: >24% em módulo sem prova de HJT) é red flag de exagero.
+
+── tecnologia (peso 15% da categoria) ──
+9-10: Tecnologia de geração atual (TOPCon/HJT top-tier, LFP, etc.) com evidência de adoção real no produto
+5-6: Tecnologia aceitável mas não mais o estado da arte
+0-2: Tecnologia claramente defasada ou não identificável no documento
+
+── certificacoes_internacionais (peso 15% da categoria) — IEC/UL/etc. ──
+9-10: Todas as certificações internacionais obrigatórias para a categoria visíveis com número de certificado
+5-6: Certificações internacionais parciais ou sem número
+0-2: Ausência de certificações internacionais básicas exigíveis pela categoria de produto
+
+── garantia (peso 15% da categoria) ──
+9-10: Prazo de garantia de produto E de performance claramente definidos em anos, com termos e exclusões explícitos
+5-6: Prazo mencionado mas termos vagos ou incompletos
+0-2: Nenhum prazo de garantia encontrado no documento
+
+── rma (peso 15% da categoria) ──
+Processo de troca/garantia do PRODUTO especificamente (prazo de análise, cobertura, exigências).
+9-10: Processo de RMA do produto documentado com prazo e critérios claros de aceite
+5-6: Processo mencionado de forma genérica, sem prazo
+0-2: Nenhum processo de RMA descrito no documento
+
+═══════════════════════════════════════════════════════════
+CATEGORIA 3 — MERCADO (peso 1/3 do score final)
+═══════════════════════════════════════════════════════════
+Atratividade comercial da linha para a Fotus como distribuidor.
+
+── potencial_margem (peso 30% da categoria) ──
+Targets mínimos Fotus: Módulos 12%, Inversores string 15%, BESS 18%, Carregadores EV 18%
+Targets ideais Fotus: Módulos 18%, Inversores 22%, BESS 30%, Carregadores EV 32%
+9-10: Margem estimada acima do target ideal + exclusividade possível + política de preço favorável documentada
+7-8: Margem entre o target mínimo e o ideal; política de preço estável
+5-6: Margem no limite do target mínimo; canal concorrido
+3-4: Margem abaixo do target mínimo; fabricante comprime o distribuidor
+0-2: Margem inviável; produto já comoditizado sem diferencial
+ATENÇÃO: sem dados de preço no documento, pontue conservadoramente (máximo 5).
+
+── fit_portfolio (peso 25% da categoria) ──
 Gaps prioritários Fotus 2026: BESS residencial/C&I, Carregadores EV com INMETRO, Inversores com melhor pós-venda que atual, Módulos TOPCon Tier-1 com margem melhor
 9-10: Preenche gap estratégico claro; não canibaliza nenhum fornecedor atual forte
 7-8: Complementa portfólio com diferencial claro; sobreposição gerenciável
 5-6: Sobreposição significativa com portfólio atual; justificável como alternativa de negociação
-3-4: Alta canibalização de fornecedor atual sem vantagem técnica ou comercial clara
-0-2: Duplicação pura; produto fora do escopo da Fotus; nicho sem demanda real dos integradores
+3-4: Alta canibalização de fornecedor atual sem vantagem técnica/comercial clara
+0-2: Duplicação pura; produto fora do escopo da Fotus
 
-──────────────────────────────────────────────────────────
-POTENCIAL DE MARGEM (peso 10%)
-──────────────────────────────────────────────────────────
-Targets mínimos Fotus: Módulos 12%, Inversores string 15%, BESS 18%, Carregadores EV 18%
-Targets ideais Fotus: Módulos 18%, Inversores 22%, BESS 30%, Carregadores EV 32%
-9-10: Margem estimada acima do target ideal + exclusividade possível + política de preço favorável documentada
-7-8: Margem entre target mínimo e ideal; política de preço estável
-5-6: Margem no limite do target mínimo; canal concorrido
-3-4: Margem abaixo do target mínimo; fabricante comprime distribuidor
-0-2: Margem inviável; produto já comoditizado sem diferencial
-ATENÇÃO: sem dados de preço no documento, pontue conservadoramente (máximo 5).
+── canal_vendas (peso 15% da categoria) ──
+Estrutura de distribuição do fabricante e risco de conflito de canal para a Fotus.
+9-10: Modelo de canal claro e documentado, sem venda direta que compita com distribuidores
+5-6: Modelo de canal ambíguo ou parcialmente documentado
+0-2: Evidência de venda direta ao integrador/consumidor final que compete com o canal de distribuição
 
-──────────────────────────────────────────────────────────
-CERTIFICAÇÕES E COMPLIANCE (peso 10%)
-──────────────────────────────────────────────────────────
-Obrigatórias por categoria:
-  Módulos FV: IEC 61215 + IEC 61730 + INMETRO (portaria 004)
-  Inversores on-grid: IEC 62116 + IEC 61683 + INMETRO (portaria 357)
-  BESS: IEC 62619 + UN 38.3 + INMETRO
-  Carregadores EV AC: IEC 61851-1 + INMETRO (portaria 563)
-9-10: Todas obrigatórias VISÍVEIS no documento com número de certificado + INMETRO válido
-7-8: Todas obrigatórias mencionadas + INMETRO em processo com prazo documentado
-5-6: IEC internacionais presentes sem INMETRO; ou INMETRO declarado sem prazo
-3-4: Certificações parciais; INMETRO ausente sem qualquer plano mencionado
-0-2: Ausência de certificações IEC básicas para produto que requer conexão à rede elétrica
+── barreira_entrada (peso 15% da categoria) ──
+Dificuldade de outro distribuidor replicar esta posição (exclusividade, dificuldade regulatória, relação já estabelecida).
+9-10: Barreira clara e documentada (exclusividade territorial, processo de homologação longo já vencido, etc.)
+5-6: Alguma barreira, mas replicável com esforço moderado
+0-2: Nenhuma barreira — qualquer concorrente pode obter as mesmas condições
+
+── moq (peso 15% da categoria) ──
+9-10: MOQ baixo e claramente documentado, compatível com capital de giro sem risco
+5-6: MOQ documentado mas exige capital de giro significativo
+0-2: MOQ alto sem flexibilidade, ou não informado (trate ausência de dado como risco, não como neutro)
 
 ══════════════════════════════════════════════════════════
 CÁLCULO DO SCORE FINAL — OBRIGATÓRIO
 ══════════════════════════════════════════════════════════
-score_base = (qualidade×0.25)+(solidez×0.20)+(pos_venda×0.20)+(fit×0.15)+(margem×0.10)+(certificacoes×0.10)
+score_categoria(fabricante) = pos_venda_brasil×0.30 + solidez_fabricante×0.25 + reputacao×0.15 + marketshare_nacional×0.15 + marketshare_mundial×0.15
+score_categoria(produto)    = certificacoes_nacionais×0.20 + qualidade_tecnica×0.20 + tecnologia×0.15 + certificacoes_internacionais×0.15 + garantia×0.15 + rma×0.15
+score_categoria(mercado)    = potencial_margem×0.30 + fit_portfolio×0.25 + canal_vendas×0.15 + barreira_entrada×0.15 + moq×0.15
+
+score_base = (score_categoria(fabricante) + score_categoria(produto) + score_categoria(mercado)) / 3
 penalidade_pos_venda = -1.0 SE pos_venda_brasil ≤ 5.0, SENÃO 0.0
 score_final = score_base + penalidade_pos_venda
 
@@ -283,7 +368,7 @@ VETO AUTOMÁTICO → "NO-GO" independente do score se qualquer condição:
 - pos_venda_brasil ≤ 3.0 sem plano concreto documentado de estruturação no Brasil
 - Evidência de fraude, contrafação ou irregularidade fiscal
 - Fabricante em falência ou liquidação
-- Ausência total de certificação IEC para produto que conecta à rede elétrica
+- Ausência total de certificação internacional para produto que conecta à rede elétrica
 - solidez_fabricante ≤ 2.0
 
 PERGUNTAS QUE O RELATÓRIO DEVE RESPONDER (inclua no summary e recommendation_text):
@@ -292,6 +377,67 @@ PERGUNTAS QUE O RELATÓRIO DEVE RESPONDER (inclua no summary e recommendation_te
 - "Por que esse fabricante e não o que já temos no portfólio?"
 - "Qual o pior cenário financeiro se entrarmos com essa marca?"
 """
+
+
+CATEGORY_WEIGHTS = {
+    "fabricante": {
+        "pos_venda_brasil": 0.30,
+        "solidez_fabricante": 0.25,
+        "reputacao": 0.15,
+        "marketshare_nacional": 0.15,
+        "marketshare_mundial": 0.15,
+    },
+    "produto": {
+        "certificacoes_nacionais": 0.20,
+        "qualidade_tecnica": 0.20,
+        "tecnologia": 0.15,
+        "certificacoes_internacionais": 0.15,
+        "garantia": 0.15,
+        "rma": 0.15,
+    },
+    "mercado": {
+        "potencial_margem": 0.30,
+        "fit_portfolio": 0.25,
+        "canal_vendas": 0.15,
+        "barreira_entrada": 0.15,
+        "moq": 0.15,
+    },
+}
+
+
+def _category_score(sub_scores: dict, weights: dict) -> float:
+    total = sum(float(sub_scores.get(k, 0) or 0) * w for k, w in weights.items())
+    return round(total, 2)
+
+
+def _compute_scores(scores_obj: dict) -> dict:
+    """Recalcula os scores por categoria (Fabricante/Produto/Mercado) e o score final a
+    partir das 16 sub-notas retornadas pela IA — não confia no score_categoria/score_final
+    que a IA disse ter calculado, como camada de segurança contra erro aritmético do modelo."""
+    fabricante_sub = scores_obj.get("fabricante") or {}
+    produto_sub = scores_obj.get("produto") or {}
+    mercado_sub = scores_obj.get("mercado") or {}
+
+    score_fabricante = _category_score(fabricante_sub, CATEGORY_WEIGHTS["fabricante"])
+    score_produto = _category_score(produto_sub, CATEGORY_WEIGHTS["produto"])
+    score_mercado = _category_score(mercado_sub, CATEGORY_WEIGHTS["mercado"])
+
+    pos_venda = float(fabricante_sub.get("pos_venda_brasil", 0) or 0)
+    penalidade = -1.0 if pos_venda <= 5.0 else 0.0
+    score_base = (score_fabricante + score_produto + score_mercado) / 3
+    score_final = round(max(0.0, score_base + penalidade), 2)
+
+    return {
+        "fabricante_sub": fabricante_sub,
+        "produto_sub": produto_sub,
+        "mercado_sub": mercado_sub,
+        "score_fabricante": score_fabricante,
+        "score_produto": score_produto,
+        "score_mercado": score_mercado,
+        "pos_venda_brasil": pos_venda,
+        "penalidade_pos_venda": penalidade,
+        "score_final": score_final,
+    }
 
 
 TEAM_SYSTEMS = {
@@ -943,7 +1089,12 @@ def delete_manufacturer(mid):
     conn.close()
     d = UPLOAD_DIR / mid
     if d.exists():
-        shutil.rmtree(str(d))
+        try:
+            shutil.rmtree(str(d))
+        except OSError:
+            # Pasta sincronizada (ex.: OneDrive) pode segurar um lock momentâneo nos arquivos.
+            # O fabricante já foi removido do banco — não é motivo para falhar a requisição.
+            pass
     return jsonify({"ok": True})
 
 
@@ -967,19 +1118,13 @@ def analyze():
 
     all_names = [f.name for f in all_files]
     scores = analysis.get("scores", {})
+    computed = _compute_scores(scores)
 
-    # Garante penalidade de pós-venda mesmo se o modelo não aplicou
-    pos_venda = float(scores.get("pos_venda_brasil", 0))
-    score_base = (
-        float(scores.get("qualidade_tecnologia", 0)) * 0.25
-        + float(scores.get("solidez_fabricante", 0)) * 0.20
-        + pos_venda * 0.20
-        + float(scores.get("fit_portfolio", 0)) * 0.15
-        + float(scores.get("potencial_margem", 0)) * 0.10
-        + float(scores.get("certificacoes", 0)) * 0.10
-    )
-    penalidade = -1.0 if pos_venda <= 5.0 else 0.0
-    score_final_calc = round(max(0.0, score_base + penalidade), 2)
+    pos_venda = computed["pos_venda_brasil"]
+    fabricante_sub = computed["fabricante_sub"]
+    produto_sub = computed["produto_sub"]
+    mercado_sub = computed["mercado_sub"]
+    score_final_calc = computed["score_final"]
 
     # Corrige decisão se necessário
     if score_final_calc >= 7.5:
@@ -1004,18 +1149,26 @@ def analyze():
         else "NO-GO"
     )
 
+    # Colunas antigas (6 dimensões) preenchidas com o melhor mapeamento possível, só por
+    # compatibilidade com qualquer leitura direta dessas colunas — a interface nova lê as
+    # 16 sub-notas de raw_analysis e as 3 categorias das colunas score_fabricante/produto/mercado.
+    certificacoes_media = round((
+        float(produto_sub.get("certificacoes_nacionais", 0) or 0)
+        + float(produto_sub.get("certificacoes_internacionais", 0) or 0)
+    ) / 2, 2)
+
     vals = (
         analysis["manufacturer"]["name"],
         analysis["manufacturer"].get("country", ""),
         analysis["manufacturer"].get("founded", ""),
         datetime.now().strftime("%Y-%m-%d"),
         json.dumps(analysis.get("product_types", [])),
-        float(scores.get("qualidade_tecnologia", 0)),
-        float(scores.get("solidez_fabricante", 0)),
+        float(produto_sub.get("qualidade_tecnica", 0) or 0),
+        float(fabricante_sub.get("solidez_fabricante", 0) or 0),
         pos_venda,
-        float(scores.get("fit_portfolio", 0)),
-        float(scores.get("potencial_margem", 0)),
-        float(scores.get("certificacoes", 0)),
+        float(mercado_sub.get("fit_portfolio", 0) or 0),
+        float(mercado_sub.get("potencial_margem", 0) or 0),
+        certificacoes_media,
         score_with_teams,
         decision_final,
         analysis.get("summary", ""),
@@ -1027,6 +1180,9 @@ def analyze():
         json.dumps(analysis),
         score_final_calc,        # score_ai — score puro da IA sem times
         current_team_adj,        # score_team_adj — mantém ajuste existente
+        computed["score_fabricante"],
+        computed["score_produto"],
+        computed["score_mercado"],
     )
 
     if exists:
@@ -1035,7 +1191,7 @@ def analyze():
             product_types=?,score_qualidade=?,score_solidez=?,score_pos_venda=?,score_fit=?,
             score_margem=?,score_certificacoes=?,score_final=?,decision=?,summary=?,
             red_flags=?,positives=?,products=?,recommendation=?,files=?,raw_analysis=?,
-            score_ai=?,score_team_adj=?
+            score_ai=?,score_team_adj=?,score_fabricante=?,score_produto=?,score_mercado=?
             WHERE id=?""",
             vals + (mid,),
         )
@@ -1044,8 +1200,9 @@ def analyze():
             """INSERT INTO manufacturers (id,name,country,founded,analysis_date,
             product_types,score_qualidade,score_solidez,score_pos_venda,score_fit,
             score_margem,score_certificacoes,score_final,decision,summary,red_flags,
-            positives,products,recommendation,files,raw_analysis,score_ai,score_team_adj)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            positives,products,recommendation,files,raw_analysis,score_ai,score_team_adj,
+            score_fabricante,score_produto,score_mercado)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (mid,) + vals,
         )
 
