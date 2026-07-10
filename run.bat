@@ -16,7 +16,12 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-REM ── Configuracao da chave de API (.env) ──────────────────────────────────
+REM ?? Configuracao da chave de API (.env OU variavel de ambiente do Windows) ?
+REM  Se ANTHROPIC_API_KEY ja estiver configurada como variavel de ambiente do
+REM  sistema/usuario (Painel de Controle > Variaveis de Ambiente), pula direto
+REM  para iniciar o servidor - nao precisa de arquivo .env nesse caso.
+if defined ANTHROPIC_API_KEY goto :key_ok
+
 if not exist ".env" (
     echo [SETUP] Primeira execucao: preparando arquivo de configuracao...
     copy ".env.example" ".env" >nul
@@ -43,7 +48,9 @@ if %errorlevel% equ 0 (
     exit /b 1
 )
 
-REM ── Ambiente virtual isolado (evita conflito com outros Python no PC) ────
+:key_ok
+
+REM ?? Ambiente virtual isolado (evita conflito com outros Python no PC) ????
 if not exist ".venv" (
     echo [1/3] Criando ambiente virtual Python...
     python -m venv .venv
